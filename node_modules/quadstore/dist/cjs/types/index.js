@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ResultType = void 0;
+var ResultType;
+(function (ResultType) {
+    ResultType["VOID"] = "void";
+    ResultType["QUADS"] = "quads";
+    ResultType["APPROXIMATE_SIZE"] = "approximate_size";
+})(ResultType = exports.ResultType || (exports.ResultType = {}));
+//# sourceMappingURL=index.js.map

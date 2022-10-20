@@ -1,0 +1,148 @@
+[
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "https://schema.org"
+    ],
+    "id": "http://example.org/credentials/1",
+    "type": "VerifiableCredential",
+    "issuer": "did:example:issuer1",
+    "issuanceDate": "2021-06-22T00:00:00Z",
+    "expirationDate": "2022-06-22T00:00:00Z",
+    "credentialSubject": {
+      "id": "did:example:holder1",
+      "type": "Person",
+      "givenName": "John",
+      "familyName": "Smith",
+      "birthDate": "1970-01-01",
+      "age": 20,
+      "homeLocation": {
+        "id": "did:example:cityA"
+      }
+    },
+    "proof": {
+      "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "type": "BbsTermwiseSignature2021",
+      "created": "2022-10-18T06:25:27Z",
+      "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+    }
+  },
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "https://schema.org"
+    ],
+    "id": "http://example.org/credentials/2",
+    "type": "VerifiableCredential",
+    "issuer": "did:example:issuer4",
+    "issuanceDate": "2021-07-01T00:00:00Z",
+    "expirationDate": "2022-07-01T00:00:00Z",
+    "credentialSubject": {
+      "id": "did:example:holder2",
+      "type": "Person",
+      "givenName": "Jane",
+      "familyName": "Doe",
+      "birthDate": "1990-12-31",
+      "age": 30,
+      "knows": {
+        "id": "did:example:holder1"
+      },
+      "homeLocation": {
+        "id": "did:example:cityB"
+      }
+    },
+    "proof": {
+      "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "type": "BbsTermwiseSignature2021",
+      "created": "2022-10-19T07:56:57Z",
+      "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "jgRbySOm6k6YxzqTzCcjBiaAIpJRg9wCPRp4TScEQP7G5omUf709LLCTc04CpGAOFLkzw/hivtsuTKks73zungVTRLWzJukuWBxbT7oTjIYjccPhVF9aZvuOymPSi9k7i7jH9RGh3g1FOdreQ3Ovuw=="
+    }
+  },
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "https://schema.org"
+    ],
+    "id": "http://example.org/credentials/3",
+    "type": "VerifiableCredential",
+    "issuer": "did:example:issuer2",
+    "issuanceDate": "2021-09-01T00:00:00Z",
+    "expirationDate": "2022-09-01T00:00:00Z",
+    "credentialSubject": {
+      "id": "did:example:cityA",
+      "type": "Place",
+      "name": "City A",
+      "maximumAttendeeCapacity": 10000
+    },
+    "proof": {
+      "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "type": "BbsTermwiseSignature2021",
+      "created": "2022-10-19T07:57:21Z",
+      "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
+    }
+  },
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "https://schema.org"
+    ],
+    "id": "http://example.org/credentials/3",
+    "type": "VerifiableCredential",
+    "issuer": "did:example:issuer2",
+    "issuanceDate": "2021-09-01T00:00:00Z",
+    "expirationDate": "2022-09-01T00:00:00Z",
+    "credentialSubject": {
+      "id": "did:example:cityB",
+      "type": "Place",
+      "name": "City B",
+      "maximumAttendeeCapacity": 50000
+    },
+    "proof": {
+      "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "type": "BbsTermwiseSignature2021",
+      "created": "2022-10-19T07:57:21Z",
+      "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
+    }
+  },
+  {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "https://schema.org"
+    ],
+    "id": "http://example.org/credentials/4",
+    "type": "VerifiableCredential",
+    "issuer": "did:example:issuer3",
+    "issuanceDate": "2021-01-01T00:00:00Z",
+    "expirationDate": "2022-01-01T00:00:00Z",
+    "credentialSubject": {
+      "id": "did:example:area1",
+      "type": "Place",
+      "name": "Area1",
+      "ownedBy": {
+        "id": "did:example:holder1"
+      },
+      "area": 300
+    },
+    "proof": {
+      "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+      "type": "BbsTermwiseSignature2021",
+      "created": "2022-10-19T07:57:33Z",
+      "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "mai/MOBEL4G/ZegYmaJylmUu8m2BlvMDozb2R953b6VZe243FNaI8AVIxy48ulHZW3UpRqOhPPbgIWuZZbTRgEAyT07pPi55NGMQ6o3xUcYqDy8S2R7knrHb6clIFBk1C883KiJETNqqzD4RRM2xmg=="
+    }
+  }
+]

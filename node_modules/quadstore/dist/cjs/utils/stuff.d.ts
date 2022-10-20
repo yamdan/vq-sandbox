@@ -1,0 +1,11 @@
+import type { EventEmitter } from 'events';
+import type { AbstractLevel } from 'abstract-level';
+import type { TSReadable, TermName } from '../types';
+export declare const isObject: (o: any) => boolean;
+export declare const isAbstractLevel: <TDatabase, K, V>(o: any) => o is AbstractLevel<TDatabase, K, V>;
+export declare const ensureAbstractLevel: (o: any, key: string) => void;
+export declare const streamToArray: <T>(readStream: TSReadable<T>) => Promise<T[]>;
+export declare const resolveOnEvent: (emitter: EventEmitter, event: string, rejectOnError?: boolean) => Promise<any>;
+export declare const waitForEvent: (emitter: EventEmitter, event: string, rejectOnError?: boolean) => Promise<any>;
+export declare const arrStartsWith: (arr: TermName[], prefix: TermName[]) => boolean;
+export declare const RESOLVED: Promise<void>;

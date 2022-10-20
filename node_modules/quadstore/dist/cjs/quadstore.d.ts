@@ -1,0 +1,45 @@
+/// <reference types="node" />
+import type { DataFactory, Quad, Quad_Graph, Quad_Object, Quad_Predicate, Quad_Subject, Store, Stream } from 'rdf-js';
+import type { DelStreamOpts, DelOpts, PutOpts, PatchOpts, GetOpts, InternalIndex, PutStreamOpts, Pattern, StoreOpts, VoidResult, TSReadable, TermName, Prefixes, QuadArrayResultWithInternals, QuadStreamResultWithInternals } from './types';
+import type { AbstractLevel } from 'abstract-level';
+import { EventEmitter } from 'events';
+import { Scope } from './scope';
+export declare class Quadstore implements Store {
+    readonly db: AbstractLevel<any, any, any>;
+    readonly indexes: InternalIndex[];
+    readonly id: string;
+    readonly prefixes: Prefixes;
+    readonly dataFactory: DataFactory;
+    constructor(opts: StoreOpts);
+    protected ensureReady(): void;
+    open(): Promise<void>;
+    close(): Promise<void>;
+    toString(): string;
+    toJSON(): string;
+    _addIndex(terms: TermName[]): void;
+    clear(): Promise<void>;
+    match(subject?: Quad_Subject, predicate?: Quad_Predicate, object?: Quad_Object, graph?: Quad_Graph, opts?: GetOpts): Stream<Quad>;
+    countQuads(subject?: Quad_Subject, predicate?: Quad_Predicate, object?: Quad_Object, graph?: Quad_Graph, opts?: GetOpts): Promise<number>;
+    import(source: Stream<Quad>): EventEmitter;
+    remove(source: Stream<Quad>): EventEmitter;
+    removeMatches(subject?: Quad_Subject, predicate?: Quad_Predicate, object?: Quad_Object, graph?: Quad_Graph, opts?: GetOpts): EventEmitter;
+    deleteGraph(graph: Quad_Graph): EventEmitter;
+    getApproximateSize(pattern: Pattern, opts?: GetOpts): Promise<import("./types").ApproximateSizeResult>;
+    private _batchPut;
+    put(quad: Quad, opts?: PutOpts): Promise<VoidResult>;
+    multiPut(quads: Quad[], opts?: PutOpts): Promise<VoidResult>;
+    private _batchDel;
+    del(quad: Quad, opts?: DelOpts): Promise<VoidResult>;
+    multiDel(quads: Quad[], opts?: DelOpts): Promise<VoidResult>;
+    patch(oldQuad: Quad, newQuad: Quad, opts?: PatchOpts): Promise<VoidResult>;
+    multiPatch(oldQuads: Quad[], newQuads: Quad[], opts?: PatchOpts): Promise<VoidResult>;
+    private writeBatch;
+    get(pattern: Pattern, opts?: GetOpts): Promise<QuadArrayResultWithInternals>;
+    getStream(pattern: Pattern, opts?: GetOpts): Promise<QuadStreamResultWithInternals>;
+    putStream(source: TSReadable<Quad>, opts?: PutStreamOpts): Promise<VoidResult>;
+    delStream(source: TSReadable<Quad>, opts?: DelStreamOpts): Promise<VoidResult>;
+    initScope(): Promise<Scope>;
+    loadScope(scopeId: string): Promise<Scope>;
+    deleteScope(scopeId: string): Promise<void>;
+    deleteAllScopes(): Promise<void>;
+}
