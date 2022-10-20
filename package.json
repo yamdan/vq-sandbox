@@ -9,5 +9,10 @@
     "quadstore-comunica": "^3.0.7",
     "rdf-data-factory": "^1.1.1",
     "rdflib": "^2.2.20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "exec": "node quadstore_jsonld.js",
+    "start": "tsc && node quadstore_jsonld.js"
   }
 }
