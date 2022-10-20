@@ -42,15 +42,15 @@ await store.open();
 // load JSON-LD credentials
 const SOURCE = './sample/people_namedgraph.jsonld';
 const doc = JSON.parse(fs.readFileSync(SOURCE).toString());
-const merged = doc.map((g: any) => g["@graph"]);
-const quads = await jsonld.toRDF(doc.concat(merged), { documentLoader: customDocLoader }) as RDF.Quad[];
+const quads = await jsonld.toRDF(doc, { documentLoader: customDocLoader }) as RDF.Quad[];
 
 // save quads to quadstore
 await store.multiPut(quads);
 
 // execute queries
 queries.map(async (q) => {
-  const result = await engine.query(q);
+  const result = await engine.query(q, { unionDefaultGraph: true });
+  console.log('[debug] ', result);
   if (result.resultType === 'bindings') {
     const bindingsStream = await result.execute();
     bindingsStream.on('data', (bindings) => {
