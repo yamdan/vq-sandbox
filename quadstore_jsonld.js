@@ -5,39 +5,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 // SPARQL queries
-const sparqlPrefixes = `
-PREFIX s: <http://schema.org/>
-PREFIX cred: <https://www.w3.org/2018/credentials#>
-`;
-const sparqlQueries = [
-    `
-SELECT ?cid ?s
-WHERE {
-  ?s s:givenName "Jane" .
-  ?cid cred:credentialSubject ?s .
-}
-`,
-    `
-SELECT ?cid ?s ?givenName ?placeName
-WHERE {
-  ?cid cred:credentialSubject ?s .
-  ?s s:givenName ?givenName .
-  ?s s:homeLocation ?place .
-  ?place s:name ?placeName .
-  ?place s:maximumAttendeeCapacity ?pop .
-  FILTER (?pop > 25000)
-}
-`,
-    `
-SELECT ?cid ?s ?givenName ?age
-WHERE {
-  ?s s:age ?age .
-  ?s s:givenName ?givenName .
-  ?cid cred:credentialSubject ?s .
-  FILTER (?age < 25)
-}
-`,
-];
+import queries from './queries/query2.js';
 // JSON-LD context
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
@@ -65,15 +33,32 @@ const store = new Quadstore({ backend, dataFactory: df });
 const engine = new Engine(store);
 await store.open();
 // load JSON-LD credentials
-const f = JSON.parse(fs.readFileSync('./sample/people.jsonld').toString());
-const quads = await jsonld.toRDF(f, { documentLoader: customDocLoader });
+const SOURCE = './sample/people_namedgraph.jsonld';
+const doc = JSON.parse(fs.readFileSync(SOURCE).toString());
+const merged = doc.map((g) => g["@graph"]);
+const quads = await jsonld.toRDF(doc.concat(merged), { documentLoader: customDocLoader });
 // save quads to quadstore
 await store.multiPut(quads);
 // execute queries
-sparqlQueries.map(async (q) => {
-    const stream = await engine.queryBindings(sparqlPrefixes + q);
-    stream.on('data', (bindings) => {
+queries.map(async (q) => {
+    const result = await engine.query(q);
+    if (result.resultType === 'bindings') {
+        const bindingsStream = await result.execute();
+        bindingsStream.on('data', (bindings) => {
+            console.log('\n[query]', q);
+            console.log('[result]\n', bindings.toString());
+        });
+    }
+    else if (result.resultType === 'quads') {
+        const quadStream = await result.execute();
         console.log('\n[query]', q);
-        console.log('[result]\n', bindings.toString());
-    });
+        quadStream.on('data', (quad) => {
+            console.log('[result]\n', quad);
+        });
+    }
+    else if (result.resultType === 'boolean') {
+        const askResult = await result.execute();
+        console.log('\n[query]', q);
+        console.log('[result]\n', askResult);
+    }
 });
