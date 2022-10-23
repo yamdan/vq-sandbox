@@ -38,6 +38,7 @@ const df = new DataFactory();
 const store = new Quadstore({ backend, dataFactory: df });
 const engine = new Engine(store);
 await store.open();
+const scope = await store.initScope();  // for preventing blank node collisions
 
 // load JSON-LD credentials
 const SOURCE = './sample/people_namedgraph.jsonld';
@@ -45,7 +46,7 @@ const doc = JSON.parse(fs.readFileSync(SOURCE).toString());
 const quads = await jsonld.toRDF(doc, { documentLoader: customDocLoader }) as RDF.Quad[];
 
 // save quads to quadstore
-await store.multiPut(quads);
+await store.multiPut(quads, { scope });
 
 // execute queries
 queries.map(async (q) => {
