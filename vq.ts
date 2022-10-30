@@ -1,15 +1,10 @@
 import jsonld from 'jsonld';
-import canonize from 'rdf-canonize';
 import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 import type * as RDF from '@rdfjs/types';
-import SerializerNtriples from '@rdfjs/serializer-ntriples';
-import sparqljs from 'sparqljs';
-
-// Constants
-const GRAPH_PATTERN_PREFIX = 'ggggg';  // TBD
+import { identifyGraphs, streamToArray } from './utils.js';
 
 // SPARQL queries
 import { selectQuery } from './queries/query_vq.js';
@@ -21,7 +16,6 @@ import source from './sample/people_namedgraph_bnodes.json' assert { type: 'json
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
 import schemaorg from './context/schemaorg.json' assert { type: 'json' };
-import { graph } from 'rdflib';
 const documents: any = {
   'https://www.w3.org/2018/credentials/v1': vcv1,
   'https://zkp-ld.org/bbs-termwise-2021.jsonld': zkpld,
@@ -41,22 +35,6 @@ const customDocLoader = (url: string): any => {
   );
 };
 
-// ref: https://github.com/belayeng/quadstore-comunica/blob/master/spec/src/utils.ts
-const streamToArray = <T>(source: RDF.ResultStream<T>): Promise<T[]> => {
-  return new Promise((resolve, reject) => {
-    const items: T[] = [];
-    source.on('data', (item) => {
-      items.push(item);
-    });
-    source.on('end', () => {
-      resolve(items);
-    });
-    source.on('error', (err) => {
-      reject(err);
-    });
-  });
-};
-
 // setup quadstore
 const backend = new MemoryLevel();
 const df = new DataFactory();
@@ -67,69 +45,29 @@ await store.open();
 // store JSON-LD documents
 const scope = await store.initScope();  // for preventing blank node collisions
 const quads = await jsonld.toRDF(source, { documentLoader: customDocLoader }) as RDF.Quad[];
-// remove blank node ids' prefixes `_:`
-// quads.forEach((quad) => {
-//   for (const target of [quad.subject, quad.object, quad.graph]) {
-//     if (target.termType === 'BlankNode'
-//       && target.value.startsWith('_:')) {
-//       target.value = target.value.substring(2);
-//     };
-//   }
-// });
 await store.multiPut(quads, { scope });
 
-// // for debug
-// const nquads = await jsonld.canonize(source, { format: 'application/n-quads', documentLoader: customDocLoader });
-// console.log('\n[nquads]', nquads);
-// const getResult = await store.get({});
-// console.log('\n[getResult]', getResult.items);
-
-// execute select queries
+// execute SELECT queries
 const bindingsStream = await engine.queryBindings(selectQuery, { unionDefaultGraph: true });
 const bindings = await streamToArray(bindingsStream);
-console.log('\n[query]', selectQuery);
-console.dir(bindings, { depth: null });
 if (bindings.length === 0) {
   console.error('SELECT query matches nothing');
 };
 
-// identify graphs
-const identifyGraphs = async (selectQuery: string) => {
-  // parse original query
-  const parser = new sparqljs.Parser();
-  const parsedQuery = parser.parse(selectQuery) as sparqljs.SelectQuery;
-  console.dir(parsedQuery, { depth: null });
-  if (parsedQuery.queryType !== 'SELECT') {
-    console.error('Query must be SELECT query');
-  }
-  const bgpPattern = parsedQuery.where?.filter((p) => p.type === 'bgp')[0] as sparqljs.BgpPattern;
-  const graphPatterns: sparqljs.GraphPattern[] = bgpPattern.triples.map((t, i) => {
-    const patterns: sparqljs.BgpPattern[] = [
-      {
-        type: 'bgp',
-        triples: [t]
-      }
-    ];
-    const name = df.variable(`${GRAPH_PATTERN_PREFIX}${i}`);
-    return {
-      type: 'graph',
-      patterns,
-      name
-    };
-  });
-  parsedQuery.variables = [...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_PATTERN_PREFIX}${i}`));
-  parsedQuery.where = parsedQuery.where?.concat(graphPatterns);
-  console.dir(parsedQuery, { depth: null });
-  
-  // generate query to identify named graphs
-  const generator = new sparqljs.Generator();
-  const generatedQuery = generator.stringify(parsedQuery);
-  console.log(generatedQuery);
+// identify target graphs based on BGP
+const graphToTriples = await identifyGraphs(selectQuery, df, engine);
+console.dir(graphToTriples, { depth: null });
 
-  const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
-  const bindings = await streamToArray(bindingsStream);
-  return bindings;
-}
+// get graphs
+const credsArray = [];
+for (const graphToTriple of graphToTriples) {
+  const creds = [];
+  for (const graphIRI of graphToTriple.keys()) {
+    const { items } = await store.get({ graph: df.namedNode(graphIRI) });
+    creds.push(items);
+  };
+  credsArray.push(creds);
+};
+console.dir(credsArray[0], { depth: null });
 
-const graphs = await identifyGraphs(selectQuery);
-console.dir(graphs, {depth:null});
+// TBD: get associated proofs

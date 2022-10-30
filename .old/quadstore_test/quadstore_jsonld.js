@@ -4,13 +4,13 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 // SPARQL queries
-import queries from './queries/query3.js';
+import queries from '../../queries/query3.js';
 // source documents
-import source from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
+import source from '../../sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // JSON-LD context
-import vcv1 from './context/vcv1.json' assert { type: 'json' };
-import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
-import schemaorg from './context/schemaorg.json' assert { type: 'json' };
+import vcv1 from '../../context/vcv1.json' assert { type: 'json' };
+import zkpld from '../../context/bbs-termwise-2021.json' assert { type: 'json' };
+import schemaorg from '../../context/schemaorg.json' assert { type: 'json' };
 const documents = {
     'https://www.w3.org/2018/credentials/v1': vcv1,
     'https://zkp-ld.org/bbs-termwise-2021.jsonld': zkpld,

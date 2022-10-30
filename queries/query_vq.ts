@@ -3,11 +3,11 @@ PREFIX s: <http://schema.org/>
 PREFIX cred: <https://www.w3.org/2018/credentials#>
 SELECT ?givenName
 WHERE {
-  ?s a s:Person .
-  ?s s:givenName ?givenName .
-  ?s s:homeLocation ?place .
-  ?place a s:Place .
-  ?place s:maximumAttendeeCapacity ?pop .
+  ?s a s:Person ;
+    s:givenName ?givenName ;
+    s:homeLocation ?place .
+  ?place a s:Place ;
+    s:maximumAttendeeCapacity ?pop .
   FILTER (?pop > 25000)
 }
 `;

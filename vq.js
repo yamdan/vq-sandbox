@@ -3,9 +3,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import sparqljs from 'sparqljs';
-// Constants
-const GRAPH_PATTERN_PREFIX = 'ggggg'; // TBD
+import { identifyGraphs, streamToArray } from './utils.js';
 // SPARQL queries
 import { selectQuery } from './queries/query_vq.js';
 // source documents
@@ -30,21 +28,6 @@ const customDocLoader = (url) => {
     }
     throw new Error(`Error attempted to load document remotely, please cache '${url}'`);
 };
-// ref: https://github.com/belayeng/quadstore-comunica/blob/master/spec/src/utils.ts
-const streamToArray = (source) => {
-    return new Promise((resolve, reject) => {
-        const items = [];
-        source.on('data', (item) => {
-            items.push(item);
-        });
-        source.on('end', () => {
-            resolve(items);
-        });
-        source.on('error', (err) => {
-            reject(err);
-        });
-    });
-};
 // setup quadstore
 const backend = new MemoryLevel();
 const df = new DataFactory();
@@ -54,65 +37,28 @@ await store.open();
 // store JSON-LD documents
 const scope = await store.initScope(); // for preventing blank node collisions
 const quads = await jsonld.toRDF(source, { documentLoader: customDocLoader });
-// remove blank node ids' prefixes `_:`
-// quads.forEach((quad) => {
-//   for (const target of [quad.subject, quad.object, quad.graph]) {
-//     if (target.termType === 'BlankNode'
-//       && target.value.startsWith('_:')) {
-//       target.value = target.value.substring(2);
-//     };
-//   }
-// });
 await store.multiPut(quads, { scope });
-// // for debug
-// const nquads = await jsonld.canonize(source, { format: 'application/n-quads', documentLoader: customDocLoader });
-// console.log('\n[nquads]', nquads);
-// const getResult = await store.get({});
-// console.log('\n[getResult]', getResult.items);
-// execute select queries
+// execute SELECT queries
 const bindingsStream = await engine.queryBindings(selectQuery, { unionDefaultGraph: true });
 const bindings = await streamToArray(bindingsStream);
-console.log('\n[query]', selectQuery);
-console.dir(bindings, { depth: null });
 if (bindings.length === 0) {
     console.error('SELECT query matches nothing');
 }
 ;
-// identify graphs
-const identifyGraphs = async (selectQuery) => {
-    var _a, _b;
-    // parse original query
-    const parser = new sparqljs.Parser();
-    const parsedQuery = parser.parse(selectQuery);
-    console.dir(parsedQuery, { depth: null });
-    if (parsedQuery.queryType !== 'SELECT') {
-        console.error('Query must be SELECT query');
+// identify target graphs based on BGP
+const graphToTriples = await identifyGraphs(selectQuery, df, engine);
+console.dir(graphToTriples, { depth: null });
+// get graphs
+const credsArray = [];
+for (const graphToTriple of graphToTriples) {
+    const creds = [];
+    for (const graphIRI of graphToTriple.keys()) {
+        const { items } = await store.get({ graph: df.namedNode(graphIRI) });
+        creds.push(items);
     }
-    const bgpPattern = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp')[0];
-    const graphPatterns = bgpPattern.triples.map((t, i) => {
-        const patterns = [
-            {
-                type: 'bgp',
-                triples: [t]
-            }
-        ];
-        const name = df.variable(`${GRAPH_PATTERN_PREFIX}${i}`);
-        return {
-            type: 'graph',
-            patterns,
-            name
-        };
-    });
-    parsedQuery.variables = [...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_PATTERN_PREFIX}${i}`));
-    parsedQuery.where = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.concat(graphPatterns);
-    console.dir(parsedQuery, { depth: null });
-    // generate query to identify named graphs
-    const generator = new sparqljs.Generator();
-    const generatedQuery = generator.stringify(parsedQuery);
-    console.log(generatedQuery);
-    const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
-    const bindings = await streamToArray(bindingsStream);
-    return bindings;
-};
-const graphs = await identifyGraphs(selectQuery);
-console.dir(graphs, { depth: null });
+    ;
+    credsArray.push(creds);
+}
+;
+console.dir(credsArray[0], { depth: null });
+// TBD: get associated proofs

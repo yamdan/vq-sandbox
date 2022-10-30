@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import jsonld from 'jsonld';
 import * as rdflib from 'rdflib';
 // JSON-LD context
-import vcv1 from './context/vcv1.json' assert { type: 'json' };
-import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
-import schemaorg from './context/schemaorg.json' assert { type: 'json' };
+import vcv1 from '../../context/vcv1.json' assert { type: 'json' };
+import zkpld from '../../context/bbs-termwise-2021.json' assert { type: 'json' };
+import schemaorg from '../../context/schemaorg.json' assert { type: 'json' };
 const documents = {
     'https://www.w3.org/2018/credentials/v1': vcv1,
     'https://zkp-ld.org/bbs-termwise-2021.jsonld': zkpld,
