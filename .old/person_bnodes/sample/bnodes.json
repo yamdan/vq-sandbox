@@ -1,0 +1,40 @@
+[
+  {
+    "@id": "http://example.org/graph/1",
+    "@graph": [
+      {
+        "@context": [
+          "https://www.w3.org/2018/credentials/v1",
+          "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+          "https://schema.org"
+        ],
+        "id": "_:b000",
+        "type": "Person",
+        "givenName": "John",
+        "homeLocation": {
+          "type": "Place",
+          "name": "cityA"
+        }
+      }
+    ]
+  },
+  {
+    "@id": "http://example.org/graph/2",
+    "@graph": [
+      {
+        "@context": [
+          "https://www.w3.org/2018/credentials/v1",
+          "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+          "https://schema.org"
+        ],
+        "id": "_:b111",
+        "type": "Person",
+        "givenName": "Jane",
+        "knows": {
+          "type": "Person",
+          "name": "Bob"
+        }
+      }
+    ]
+  }
+]

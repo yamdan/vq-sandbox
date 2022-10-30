@@ -4,13 +4,14 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 // SPARQL queries
-import queries from './queries/query3.js';
+import queries from './queries/person_bnodes.js';
 // source documents
-import source from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
+import source from './sample/person_bnodes.json' assert { type: 'json' };
+import source2 from './sample/person_bnodes2.json' assert { type: 'json' };
 // JSON-LD context
-import vcv1 from './context/vcv1.json' assert { type: 'json' };
-import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
-import schemaorg from './context/schemaorg.json' assert { type: 'json' };
+import vcv1 from '../../context/vcv1.json' assert { type: 'json' };
+import zkpld from '../../context/bbs-termwise-2021.json' assert { type: 'json' };
+import schemaorg from '../../context/schemaorg.json' assert { type: 'json' };
 const documents = {
     'https://www.w3.org/2018/credentials/v1': vcv1,
     'https://zkp-ld.org/bbs-termwise-2021.jsonld': zkpld,
@@ -49,19 +50,12 @@ const store = new Quadstore({ backend, dataFactory: df });
 const engine = new Engine(store);
 await store.open();
 const scope = await store.initScope(); // for preventing blank node collisions
+const scope2 = await store.initScope(); // for preventing blank node collisions
 // load JSON-LD credentials into quadstore
 const quads = await jsonld.toRDF(source, { documentLoader: customDocLoader });
-// remove blank node ids' prefixes `_:`
-// quads.forEach((quad) => {
-//   for (const target of [quad.subject, quad.object, quad.graph]) {
-//     if (target.termType === 'BlankNode'
-//       && target.value.startsWith('_:')) {
-//       target.value = target.value.substring(2);
-//     };
-//   }
-// });
-//console.log('\n[quads]', quads);
+const quads2 = await jsonld.toRDF(source2, { documentLoader: customDocLoader });
 await store.multiPut(quads, { scope });
+await store.multiPut(quads2, { scope: scope2 });
 // // debug
 const nquads = await jsonld.canonize(source, { format: 'application/n-quads', documentLoader: customDocLoader });
 console.log('\n[nquads]', nquads);
@@ -80,10 +74,6 @@ queries.map(async (q) => {
         console.log('\n[query]', q);
         const quadArray = await streamToArray(quadStream);
         console.log('\n[result]', quadArray);
-        // // canonicalize into dataset with issuer
-        // const { dataset, issuer } = await canonize.canonize(quadArray, { algorithm: 'URDNA2015+' });
-        // console.log('\n[dataset] ', dataset);
-        // console.log('\n[issuer] ', issuer);
     }
     else if (result.resultType === 'boolean') {
         const askResult = await result.execute();

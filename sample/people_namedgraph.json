@@ -19,7 +19,6 @@
           "givenName": "John",
           "familyName": "Smith",
           "birthDate": "1970-01-01",
-          "age": 20,
           "homeLocation": {
             "id": "did:example:cityA"
           }
@@ -55,7 +54,6 @@
           "givenName": "Jane",
           "familyName": "Doe",
           "birthDate": "1990-12-31",
-          "age": 30,
           "knows": {
             "id": "did:example:holder1"
           },
@@ -132,40 +130,6 @@
           "verificationMethod": "did:example:issuer1#bbs-bls-key1",
           "proofPurpose": "assertionMethod",
           "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
-        }
-      }
-    ]
-  },
-  {
-    "@id": "http://example.org/graph/5",
-    "@graph": [
-      {
-        "@context": [
-          "https://www.w3.org/2018/credentials/v1",
-          "https://zkp-ld.org/bbs-termwise-2021.jsonld",
-          "https://schema.org"
-        ],
-        "id": "http://example.org/credentials/4",
-        "type": "VerifiableCredential",
-        "issuer": "did:example:issuer3",
-        "issuanceDate": "2021-01-01T00:00:00Z",
-        "expirationDate": "2022-01-01T00:00:00Z",
-        "credentialSubject": {
-          "id": "did:example:area1",
-          "type": "Place",
-          "name": "Area1",
-          "ownedBy": {
-            "id": "did:example:holder1"
-          },
-          "area": 300
-        },
-        "proof": {
-          "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
-          "type": "BbsTermwiseSignature2021",
-          "created": "2022-10-19T07:57:33Z",
-          "verificationMethod": "did:example:issuer1#bbs-bls-key1",
-          "proofPurpose": "assertionMethod",
-          "proofValue": "mai/MOBEL4G/ZegYmaJylmUu8m2BlvMDozb2R953b6VZe243FNaI8AVIxy48ulHZW3UpRqOhPPbgIWuZZbTRgEAyT07pPi55NGMQ6o3xUcYqDy8S2R7knrHb6clIFBk1C883KiJETNqqzD4RRM2xmg=="
         }
       }
     ]
