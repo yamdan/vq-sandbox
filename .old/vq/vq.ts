@@ -1,9 +1,10 @@
 import jsonld from 'jsonld';
+import type * as RDF from '@rdfjs/types';
 import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import type * as RDF from '@rdfjs/types';
+
 import { identifyGraphs, streamToArray } from './utils.js';
 
 // SPARQL queries
@@ -71,3 +72,10 @@ for (const graphToTriple of graphToTriples) {
 console.dir(credsArray[0], { depth: null });
 
 // TBD: get associated proofs
+
+// get revealed quads
+
+// run rdf-signatures-bbs to get derived proofs
+
+// attach derived proofs
+
