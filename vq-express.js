@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { identifyGraphs, streamToArray } from './utils.js';
+import { extractVars, identifyGraphs, streamToArray } from './utils.js';
 // source documents
 import source from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // JSON-LD context
@@ -41,32 +41,39 @@ await store.multiPut(quads, { scope });
 const app = express();
 const port = 3000;
 app.disable('x-powered-by');
-app.use(express.urlencoded());
 app.listen(port, () => {
     console.log('vq-express: started on port 3000');
 });
-// SPARQL endpoint
+// SPARQL endpoint for Fetch
 app.get('/sparql/', async (req, res, next) => {
     // get query string
     const query = req.query.query;
     if (typeof query !== 'string') {
         return next(new Error('SPARQL query must be given as `query` parameter'));
     }
-    // parse query
-    const parsedQuery = await engine.query(query, { unionDefaultGraph: true });
+    // parse and execute SELECT query
+    let parsedQuery;
+    try {
+        parsedQuery = await engine.query(query, { unionDefaultGraph: true });
+    }
+    catch (error) {
+        return next(new Error(`malformed SPARQL query: ${error}`));
+    }
     if (parsedQuery.resultType !== 'bindings') {
         return next(new Error('SPARQL query must be SELECT form'));
     }
-    // execute SELECT queries
     const bindingsStream = await parsedQuery.execute();
-    const bindings = await streamToArray(bindingsStream);
-    if (bindings.length === 0) {
-        return next(new Error('SELECT query matches nothing'));
+    const bindingsArray = await streamToArray(bindingsStream);
+    // extract variables of SELECT query
+    const vars = extractVars(query);
+    if (vars == undefined) {
+        return next(new Error('SPARQL query must be SELECT form'));
     }
-    ;
     // identify target graphs based on BGP
     const graphToTriples = await identifyGraphs(query, df, engine);
-    console.dir(graphToTriples, { depth: null });
+    if (graphToTriples == undefined) {
+        return next(new Error('SPARQL query must be SELECT form'));
+    }
     // get graphs
     const credsArray = [];
     for (const graphToTriple of graphToTriples) {
@@ -79,12 +86,70 @@ app.get('/sparql/', async (req, res, next) => {
         credsArray.push(creds);
     }
     ;
-    console.dir(credsArray[0], { depth: null });
-    // send response
-    res.send({
-        'query': `${query}`,
-        'creds': credsArray,
-    });
+    const isNotNullOrUndefined = (v) => null != v;
+    let jsonVars;
+    if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {
+        jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
+    }
+    else {
+        jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
+    }
+    console.dir(bindingsArray[0], { depth: 5 });
+    console.log([...bindingsArray[0].keys()]);
+    const jsonBindingsArray = [];
+    for (const bindings of bindingsArray) {
+        const jsonBindingsEntries = [...bindings].map(([k, v]) => {
+            let value;
+            if (v.termType === 'Literal') {
+                if (v.language !== '') {
+                    value = {
+                        type: 'literal',
+                        value: v.value,
+                        'xml:lang': v.language
+                    };
+                }
+                else if (v.datatype.value === 'http://www.w3.org/2001/XMLSchema#string') {
+                    value = {
+                        type: 'literal',
+                        value: v.value
+                    };
+                }
+                else {
+                    value = {
+                        type: 'literal',
+                        value: v.value,
+                        datatype: v.datatype.value
+                    };
+                }
+            }
+            else if (v.termType === 'NamedNode') {
+                value = {
+                    type: 'uri',
+                    value: v.value
+                };
+            }
+            else if (v.termType === 'BlankNode') {
+                value = {
+                    type: 'bnode',
+                    value: v.value
+                };
+            }
+            else {
+                return undefined;
+            }
+            ;
+            return [k.value, value];
+        }).filter(isNotNullOrUndefined);
+        const jsonBindings = Object.fromEntries(jsonBindingsEntries);
+        jsonBindingsArray.push(jsonBindings);
+    }
+    const jsonResults = {
+        "head": { "vars": jsonVars },
+        "results": {
+            "bindings": jsonBindingsArray
+        }
+    };
+    res.send(jsonResults);
     // TBD: get associated proofs
     // get revealed quads
     // run rdf-signatures-bbs to get derived proofs

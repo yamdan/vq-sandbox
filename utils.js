@@ -1,16 +1,23 @@
 import sparqljs from 'sparqljs';
 // Constants
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
+export const extractVars = (query) => {
+    const parser = new sparqljs.Parser();
+    const parsedQuery = parser.parse(query);
+    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+        return undefined;
+    }
+    return parsedQuery.variables;
+};
 // utility function to identify graphs
-export const identifyGraphs = async (selectQuery, df, engine) => {
+export const identifyGraphs = async (query, df, engine) => {
     var _a, _b;
     // parse the original SELECT query to get Basic Graph Pattern (BGP)
     const parser = new sparqljs.Parser();
-    const parsedQuery = parser.parse(selectQuery);
-    if (parsedQuery.queryType !== 'SELECT') {
-        console.error('Query must be SELECT query');
+    const parsedQuery = parser.parse(query);
+    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+        return undefined;
     }
-    ;
     const bgpPattern = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp')[0];
     const graphPatterns = bgpPattern.triples.map((triple, i) => {
         const patterns = [
