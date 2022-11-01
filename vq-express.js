@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, identifyCreds as identifyCreds, streamToArray } from './utils.js';
+import { extractVars, getRevealedQuads, identifyCreds, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // JSON-LD context
@@ -72,23 +72,24 @@ app.get('/sparql/', async (req, res, next) => {
         return next(new Error('SPARQL query must be SELECT form'));
     }
     // identify target credentials based on BGP
-    const credToTriples = await identifyCreds(query, df, engine);
-    if (credToTriples == undefined) {
-        return next(new Error('SPARQL query must be SELECT form'));
+    const credGraphIriToBgpTriples = await identifyCreds(query, df, engine);
+    if (credGraphIriToBgpTriples == undefined) {
+        return next(new Error('SPARQL query must be SELECT form')); // TBD
     }
-    // get target credentials
+    console.log(credGraphIriToBgpTriples);
+    // get original credentials
     const credsArray = [];
-    for (const credToTriple of credToTriples) {
+    for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
         const creds = [];
-        for (const credGraphIRI of credToTriple.keys()) {
-            // get document (credential without proof)
-            const { items: docWithGraphIRI } = await store.get({ graph: df.namedNode(credGraphIRI) });
-            const doc = docWithGraphIRI.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
+        for (const credGraphIri of credGraphIriToBgpTriple.keys()) {
+            // get whole document (without proof)
+            const { items: docWithGraphIri } = await store.get({ graph: df.namedNode(credGraphIri) });
+            const doc = docWithGraphIri.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
             // get proofs
-            const { items: proofIDQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIRI) });
+            const { items: proofIdQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIri) });
             const proofs = [];
-            for (const proofID of proofIDQuads.map((proofIDQuad) => proofIDQuad.object.value)) {
-                const { items: proofQuads } = await store.get({ graph: df.blankNode(proofID) });
+            for (const proofId of proofIdQuads.map((proofIdQuad) => proofIdQuad.object.value)) {
+                const { items: proofQuads } = await store.get({ graph: df.blankNode(proofId) });
                 proofs.push(proofQuads);
             }
             creds.push({
@@ -99,17 +100,40 @@ app.get('/sparql/', async (req, res, next) => {
         credsArray.push(creds);
     }
     ;
+    // get revealed credentials
+    const revealedCredsArray = [];
+    for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
+        const creds = [];
+        for (const [revealedCredGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
+            // get whole document (without proof)
+            const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, query, df, engine);
+            if (doc == undefined) {
+                return next(new Error('SPARQL query must be SELECT form')); // TBD
+            }
+            // TBD: get proofs
+            const proofs = [];
+            creds.push({
+                doc, proofs
+            });
+        }
+        ;
+        revealedCredsArray.push(creds);
+    }
+    console.dir(revealedCredsArray, { depth: 8 });
     // serialize credentials
-    const credJSONs = [];
-    for (const creds of credsArray) {
+    const credJsons = [];
+    for (const creds of revealedCredsArray) {
+        if (creds == null) {
+            return next(new Error('internal error')); // TBD
+        }
         for (const cred of creds) {
-            const credJSON = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
-            const credJSONCompact = await jsonld.compact(credJSON, CONTEXTS, { documentLoader: customDocLoader });
-            credJSONs.push(credJSONCompact);
+            const credJson = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
+            const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
+            credJsons.push(credJsonCompact);
         }
     }
     // add VP (or VCs) to bindings
-    const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(JSON.stringify(credJSONs[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON'))));
+    const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(JSON.stringify(credJsons[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON'))));
     const isNotNullOrUndefined = (v) => null != v;
     let jsonVars;
     if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {

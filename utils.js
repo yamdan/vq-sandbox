@@ -35,7 +35,7 @@ export const identifyCreds = async (query, df, engine) => {
         };
     });
     // prepare mapping from graph variables to triples
-    const graphVarToTriple = Object.assign({}, ...bgpPattern.triples.map((triple, i) => ({
+    const graphVarToBgpTriple = Object.assign({}, ...bgpPattern.triples.map((triple, i) => ({
         [`${GRAPH_VAR_PREFIX}${i}`]: triple
     })));
     // generate a new SELECT query to identify named graphs
@@ -43,18 +43,40 @@ export const identifyCreds = async (query, df, engine) => {
     parsedQuery.where = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.concat(graphPatterns);
     const generator = new sparqljs.Generator();
     const generatedQuery = generator.stringify(parsedQuery);
+    console.log(generatedQuery);
     // extract identified graphs from the query result
     const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
     const bindingsArray = await streamToArray(bindingsStream);
     const result = [];
     for (const bindings of bindingsArray) {
-        const graphIRIAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
-        const graphIRIAndTriples = graphIRIAndGraphVars.map(([graph, gvar]) => [graph, graphVarToTriple[gvar]]);
-        const graphIRIToTriples = entriesToMap(graphIRIAndTriples);
-        result.push(graphIRIToTriples);
+        const graphIriAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
+        const graphIriAndBgpTriples = graphIriAndGraphVars.map(([graph, gvar]) => [graph, graphVarToBgpTriple[gvar]]);
+        const graphIriToBgpTriples = entriesToMap(graphIriAndBgpTriples);
+        result.push(graphIriToBgpTriples);
     }
     ;
     return result;
+};
+export const getRevealedQuads = async (credGraphIri, bgpTriples, query, df, engine) => {
+    const parser = new sparqljs.Parser();
+    const parsedSelectQuery = parser.parse(query);
+    if (!(parsedSelectQuery.type === 'query' && parsedSelectQuery.queryType === 'SELECT')) {
+        return undefined;
+    }
+    const parsedQuery = {
+        queryType: 'CONSTRUCT',
+        type: 'query',
+        prefixes: {},
+    };
+    parsedQuery.where = parsedSelectQuery.where;
+    parsedQuery.template = bgpTriples;
+    const generator = new sparqljs.Generator();
+    const generatedQuery = generator.stringify(parsedQuery);
+    console.log(credGraphIri);
+    console.log(generatedQuery);
+    const quadsStream = await engine.queryQuads(generatedQuery, { unionDefaultGraph: true });
+    const quadsArray = await streamToArray(quadsStream);
+    return quadsArray;
 };
 // utility function from [string, T][] to Map<string, T[]>
 export const entriesToMap = (entries) => {
