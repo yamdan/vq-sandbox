@@ -5,23 +5,26 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, identifyGraphs, streamToArray } from './utils.js';
+import { extractVars, identifyCreds as identifyCreds, streamToArray } from './utils.js';
 
 // source documents
-import source from './sample/people_namedgraph_bnodes.json' assert { type: 'json'};
+import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 
 // JSON-LD context
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
 import schemaorg from './context/schemaorg.json' assert { type: 'json' };
 
-const documents: any = {
-  'https://www.w3.org/2018/credentials/v1': vcv1,
-  'https://zkp-ld.org/bbs-termwise-2021.jsonld': zkpld,
-  'https://schema.org': schemaorg
-};
+const PROOF = 'https://w3id.org/security#proof';
+
+const URL_TO_CONTEXTS = new Map([
+  ['https://www.w3.org/2018/credentials/v1', vcv1],
+  ['https://zkp-ld.org/bbs-termwise-2021.jsonld', zkpld],
+  ['https://schema.org', schemaorg],
+]);
+const CONTEXTS = [...URL_TO_CONTEXTS.keys()] as unknown as jsonld.ContextDefinition; // TBD
 const customDocLoader = (url: string): any => {
-  const context = documents[url];
+  const context = URL_TO_CONTEXTS.get(url);
   if (context) {
     return {
       contextUrl: null, // this is for a context via a link header
@@ -43,7 +46,7 @@ await store.open();
 
 // store initial documents
 const scope = await store.initScope();  // for preventing blank node collisions
-const quads = await jsonld.toRDF(source, { documentLoader: customDocLoader }) as RDF.Quad[];
+const quads = await jsonld.toRDF(creds, { documentLoader: customDocLoader }) as RDF.Quad[];
 await store.multiPut(quads, { scope });
 
 // setup express server
@@ -75,28 +78,56 @@ app.get('/sparql/', async (req, res, next) => {
   const bindingsStream = await parsedQuery.execute();
   const bindingsArray = await streamToArray(bindingsStream);
 
-  // extract variables of SELECT query
+  // extract variables from SELECT query
   const vars = extractVars(query);
   if (vars == undefined) {
     return next(new Error('SPARQL query must be SELECT form'));
   }
 
-  // identify target graphs based on BGP
-  const graphToTriples = await identifyGraphs(query, df, engine);
-  if (graphToTriples == undefined) {
+  // identify target credentials based on BGP
+  const credToTriples = await identifyCreds(query, df, engine);
+  if (credToTriples == undefined) {
     return next(new Error('SPARQL query must be SELECT form'));
   }
 
-  // get graphs
+  // get target credentials
   const credsArray = [];
-  for (const graphToTriple of graphToTriples) {
+  for (const credToTriple of credToTriples) {
     const creds = [];
-    for (const graphIRI of graphToTriple.keys()) {
-      const { items } = await store.get({ graph: df.namedNode(graphIRI) });
-      creds.push(items);
+    for (const credGraphIRI of credToTriple.keys()) {
+      // get document (credential without proof)
+      const { items: docWithGraphIRI } = await store.get({ graph: df.namedNode(credGraphIRI) });
+      const doc = docWithGraphIRI.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
+      // get proofs
+      const { items: proofIDQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIRI) });
+      const proofs = [];
+      for (const proofID of proofIDQuads.map((proofIDQuad: RDF.Quad) => proofIDQuad.object.value)) {
+        const { items: proofQuads } = await store.get({ graph: df.blankNode(proofID) });
+        proofs.push(proofQuads);
+      }
+      creds.push({
+        doc, proofs
+      });
     };
     credsArray.push(creds);
   };
+
+  // TBD: get revealed credentials
+
+  // serialize credentials
+  const credJSONs: jsonld.NodeObject[] = [];
+  for (const creds of credsArray) {
+    for (const cred of creds) {
+      const credJSON = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
+      const credJSONCompact = await jsonld.compact(credJSON, CONTEXTS, { documentLoader: customDocLoader });
+      credJSONs.push(credJSONCompact);
+    }
+  }
+
+  // add VP (or VCs) to bindings
+  const bindingsWithVPArray = bindingsArray.map((bindings, i) =>
+    bindings.set('vp', df.literal(JSON.stringify(credJSONs[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON')))
+  );
 
   // send response
   type jsonBindingsURIType = {
@@ -110,17 +141,18 @@ app.get('/sparql/', async (req, res, next) => {
   };
   type jsonBindingsType = jsonBindingsURIType | jsonBindingsLiteralType | jsonBindingsBnodeType;
   const isNotNullOrUndefined = <T>(v?: T | null): v is T => null != v;
-
   let jsonVars: string[];
   if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {
+    // SELECT * WHERE {...}
     jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
   } else {
+    // SELECT ?s ?p ?o WHERE {...} / SELECT (?s AS ?sub) ?p ?o WHERE {...}
     jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
   }
-  console.dir(bindingsArray[0], { depth: 5 });
-  console.log([...bindingsArray[0].keys()]);
+  jsonVars.push('vp');
+
   const jsonBindingsArray = [];
-  for (const bindings of bindingsArray) {
+  for (const bindings of bindingsWithVPArray) {
     const jsonBindingsEntries: [string, jsonBindingsType][] = [...bindings].map(([k, v]) => {
       let value: jsonBindingsType;
       if (v.termType === 'Literal') {
@@ -168,10 +200,6 @@ app.get('/sparql/', async (req, res, next) => {
   };
 
   res.send(jsonResults);
-
-  // TBD: get associated proofs
-
-  // get revealed quads
 
   // run rdf-signatures-bbs to get derived proofs
 

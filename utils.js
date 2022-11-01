@@ -9,8 +9,8 @@ export const extractVars = (query) => {
     }
     return parsedQuery.variables;
 };
-// utility function to identify graphs
-export const identifyGraphs = async (query, df, engine) => {
+// identify credentials related to the given query
+export const identifyCreds = async (query, df, engine) => {
     var _a, _b;
     // parse the original SELECT query to get Basic Graph Pattern (BGP)
     const parser = new sparqljs.Parser();
@@ -19,6 +19,7 @@ export const identifyGraphs = async (query, df, engine) => {
         return undefined;
     }
     const bgpPattern = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp')[0];
+    // create graph patterns based on BGPs 
     const graphPatterns = bgpPattern.triples.map((triple, i) => {
         const patterns = [
             {
@@ -37,7 +38,7 @@ export const identifyGraphs = async (query, df, engine) => {
     const graphVarToTriple = Object.assign({}, ...bgpPattern.triples.map((triple, i) => ({
         [`${GRAPH_VAR_PREFIX}${i}`]: triple
     })));
-    // generate a new query to identify named graphs
+    // generate a new SELECT query to identify named graphs
     parsedQuery.variables = [...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`));
     parsedQuery.where = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.concat(graphPatterns);
     const generator = new sparqljs.Generator();
@@ -47,10 +48,10 @@ export const identifyGraphs = async (query, df, engine) => {
     const bindingsArray = await streamToArray(bindingsStream);
     const result = [];
     for (const bindings of bindingsArray) {
-        const graphAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
-        const graphAndPatterns = graphAndGraphVars.map(([graph, gvar]) => [graph, graphVarToTriple[gvar]]);
-        const graphToTriples = entriesToMap(graphAndPatterns);
-        result.push(graphToTriples);
+        const graphIRIAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
+        const graphIRIAndTriples = graphIRIAndGraphVars.map(([graph, gvar]) => [graph, graphVarToTriple[gvar]]);
+        const graphIRIToTriples = entriesToMap(graphIRIAndTriples);
+        result.push(graphIRIToTriples);
     }
     ;
     return result;

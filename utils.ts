@@ -15,8 +15,8 @@ export const extractVars = (query: string) => {
   return parsedQuery.variables;
 }
 
-// utility function to identify graphs
-export const identifyGraphs = async (query: string, df: DataFactory<RDF.Quad>, engine: Engine) => {
+// identify credentials related to the given query
+export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, engine: Engine) => {
   // parse the original SELECT query to get Basic Graph Pattern (BGP)
   const parser = new sparqljs.Parser();
   const parsedQuery = parser.parse(query);
@@ -26,6 +26,7 @@ export const identifyGraphs = async (query: string, df: DataFactory<RDF.Quad>, e
 
   const bgpPattern = parsedQuery.where?.filter((p) => p.type === 'bgp')[0] as sparqljs.BgpPattern;
 
+  // create graph patterns based on BGPs 
   const graphPatterns: sparqljs.GraphPattern[] = bgpPattern.triples.map((triple, i) => {
     const patterns: sparqljs.BgpPattern[] = [
       {
@@ -46,7 +47,7 @@ export const identifyGraphs = async (query: string, df: DataFactory<RDF.Quad>, e
     [`${GRAPH_VAR_PREFIX}${i}`]: triple
   })));
 
-  // generate a new query to identify named graphs
+  // generate a new SELECT query to identify named graphs
   parsedQuery.variables = [...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`));
   parsedQuery.where = parsedQuery.where?.concat(graphPatterns);
   const generator = new sparqljs.Generator();
@@ -57,10 +58,10 @@ export const identifyGraphs = async (query: string, df: DataFactory<RDF.Quad>, e
   const bindingsArray = await streamToArray(bindingsStream);
   const result: Map<string, sparqljs.Triple[]>[] = [];
   for (const bindings of bindingsArray) {
-    const graphAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
-    const graphAndPatterns: [string, sparqljs.Triple][] = graphAndGraphVars.map(([graph, gvar]) => [graph, graphVarToTriple[gvar]]);
-    const graphToTriples = entriesToMap(graphAndPatterns);
-    result.push(graphToTriples);
+    const graphIRIAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
+    const graphIRIAndTriples: [string, sparqljs.Triple][] = graphIRIAndGraphVars.map(([graph, gvar]) => [graph, graphVarToTriple[gvar]]);
+    const graphIRIToTriples = entriesToMap(graphIRIAndTriples);
+    result.push(graphIRIToTriples);
   };
   return result;
 };
