@@ -109,3 +109,60 @@ export const streamToArray = (source) => {
         });
     });
 };
+export const genJsonResults = (jsonVars, bindingsArray) => {
+    const isNotNullOrUndefined = (v) => null != v;
+    const jsonBindingsArray = [];
+    for (const bindings of bindingsArray) {
+        const jsonBindingsEntries = [...bindings].map(([k, v]) => {
+            let value;
+            if (v.termType === 'Literal') {
+                if (v.language !== '') {
+                    value = {
+                        type: 'literal',
+                        value: v.value,
+                        'xml:lang': v.language
+                    };
+                }
+                else if (v.datatype.value === 'http://www.w3.org/2001/XMLSchema#string') {
+                    value = {
+                        type: 'literal',
+                        value: v.value
+                    };
+                }
+                else {
+                    value = {
+                        type: 'literal',
+                        value: v.value,
+                        datatype: v.datatype.value
+                    };
+                }
+            }
+            else if (v.termType === 'NamedNode') {
+                value = {
+                    type: 'uri',
+                    value: v.value
+                };
+            }
+            else if (v.termType === 'BlankNode') {
+                value = {
+                    type: 'bnode',
+                    value: v.value
+                };
+            }
+            else {
+                return undefined;
+            }
+            ;
+            return [k.value, value];
+        }).filter(isNotNullOrUndefined);
+        const jsonBindings = Object.fromEntries(jsonBindingsEntries);
+        jsonBindingsArray.push(jsonBindings);
+    }
+    const jsonResults = {
+        "head": { "vars": jsonVars },
+        "results": {
+            "bindings": jsonBindingsArray
+        }
+    };
+    return jsonResults;
+};

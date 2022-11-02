@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, getRevealedQuads, identifyCreds, streamToArray } from './utils.js';
+import { extractVars, genJsonResults, getRevealedQuads, identifyCreds, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -57,8 +57,47 @@ app.listen(port, () => {
   console.log('vq-express: started on port 3000');
 });
 
-// SPARQL endpoint for Fetch
+// ordinal SPARQL endpoint
 app.get('/sparql/', async (req, res, next) => {
+  // get query string
+  const query = req.query.query;
+  if (typeof query !== 'string') {
+    return next(new Error('SPARQL query must be given as `query` parameter'));
+  }
+
+  // parse and execute query
+  let parsedQuery: RDF.Query<RDF.AllMetadataSupport>;
+  try {
+    parsedQuery = await engine.query(query, { unionDefaultGraph: true });
+  } catch (error) {
+    return next(new Error(`malformed SPARQL query: ${error}`));
+  }
+  if (parsedQuery.resultType !== 'bindings') {
+    return next(new Error('SPARQL query must be SELECT form'));
+  }
+  const bindingsStream = await parsedQuery.execute();
+  const bindingsArray = await streamToArray(bindingsStream);
+
+  // extract variables from SELECT query
+  const vars = extractVars(query);
+  if (vars == undefined) {
+    return next(new Error('SPARQL query must be SELECT form'));
+  }
+
+  // send response
+  let jsonVars: string[];
+  if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {
+    // SELECT * WHERE {...}
+    jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
+  } else {
+    // SELECT ?s ?p ?o WHERE {...} / SELECT (?s AS ?sub) ?p ?o WHERE {...}
+    jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
+  }
+  res.send(genJsonResults(jsonVars, bindingsArray));
+});
+
+// SPARQL endpoint with VPs
+app.get('/vsparql/', async (req, res, next) => {
   // get query string
   const query = req.query.query;
   if (typeof query !== 'string') {
@@ -117,12 +156,12 @@ app.get('/sparql/', async (req, res, next) => {
   const revealedCredsArray = [];
   for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
     const creds = [];
-    for (const [ revealedCredGraphIri, bgpTriples ] of credGraphIriToBgpTriple.entries()) {
+    for (const [revealedCredGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
       // get whole document (without proof)
       const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, query, df, engine);
       if (doc == undefined) {
         return next(new Error('SPARQL query must be SELECT form')); // TBD
-      }    
+      }
       // TBD: get proofs
       const proofs: any = [];
       creds.push({
@@ -131,7 +170,7 @@ app.get('/sparql/', async (req, res, next) => {
     };
     revealedCredsArray.push(creds);
   }
-  console.dir(revealedCredsArray, {depth:8});
+  console.dir(revealedCredsArray, { depth: 8 });
 
   // serialize credentials
   const credJsons: jsonld.NodeObject[] = [];
@@ -152,17 +191,6 @@ app.get('/sparql/', async (req, res, next) => {
   );
 
   // send response
-  type jsonBindingsUriType = {
-    type: 'uri', value: string
-  };
-  type jsonBindingsLiteralType = {
-    type: 'literal', value: string, 'xml:lang'?: string, datatype?: string
-  };
-  type jsonBindingsBnodeType = {
-    type: 'bnode', value: string
-  };
-  type jsonBindingsType = jsonBindingsUriType | jsonBindingsLiteralType | jsonBindingsBnodeType;
-  const isNotNullOrUndefined = <T>(v?: T | null): v is T => null != v;
   let jsonVars: string[];
   if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {
     // SELECT * WHERE {...}
@@ -172,56 +200,7 @@ app.get('/sparql/', async (req, res, next) => {
     jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
   }
   jsonVars.push('vp');
-
-  const jsonBindingsArray = [];
-  for (const bindings of bindingsWithVPArray) {
-    const jsonBindingsEntries: [string, jsonBindingsType][] = [...bindings].map(([k, v]) => {
-      let value: jsonBindingsType;
-      if (v.termType === 'Literal') {
-        if (v.language !== '') {
-          value = {
-            type: 'literal',
-            value: v.value,
-            'xml:lang': v.language
-          };
-        } else if (v.datatype.value === 'http://www.w3.org/2001/XMLSchema#string') {
-          value = {
-            type: 'literal',
-            value: v.value
-          };
-        } else {
-          value = {
-            type: 'literal',
-            value: v.value,
-            datatype: v.datatype.value
-          };
-        }
-      } else if (v.termType === 'NamedNode') {
-        value = {
-          type: 'uri',
-          value: v.value
-        };
-      } else if (v.termType === 'BlankNode') {
-        value = {
-          type: 'bnode',
-          value: v.value
-        };
-      } else {
-        return undefined;
-      };
-      return [k.value, value];
-    }).filter(isNotNullOrUndefined) as [string, jsonBindingsType][];
-    const jsonBindings = Object.fromEntries(jsonBindingsEntries);
-    jsonBindingsArray.push(jsonBindings);
-  }
-  const jsonResults = {
-    "head": { "vars": jsonVars },
-    "results": {
-      "bindings": jsonBindingsArray
-    }
-  };
-
-  res.send(jsonResults);
+  res.send(genJsonResults(jsonVars, bindingsWithVPArray));
 
   // run rdf-signatures-bbs to get derived proofs
 

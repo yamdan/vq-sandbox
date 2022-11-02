@@ -12,6 +12,7 @@
       "issuanceDate": "2021-06-22T00:00:00Z",
       "expirationDate": "2022-06-22T00:00:00Z",
       "credentialSubject": {
+        "id": "did:example:John",
         "type": "Person",
         "givenName": "John",
         "familyName": "Smith",
@@ -39,7 +40,7 @@
         "https://schema.org"
       ],
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer4",
+      "issuer": "did:example:issuer2",
       "issuanceDate": "2021-07-01T00:00:00Z",
       "expirationDate": "2022-07-01T00:00:00Z",
       "credentialSubject": {
@@ -58,7 +59,7 @@
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
         "created": "2022-10-19T07:56:57Z",
-        "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+        "verificationMethod": "did:example:issuer2#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
         "proofValue": "jgRbySOm6k6YxzqTzCcjBiaAIpJRg9wCPRp4TScEQP7G5omUf709LLCTc04CpGAOFLkzw/hivtsuTKks73zungVTRLWzJukuWBxbT7oTjIYjccPhVF9aZvuOymPSi9k7i7jH9RGh3g1FOdreQ3Ovuw=="
       }
@@ -74,7 +75,7 @@
       ],
       "id": "http://example.org/credentials/3",
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer2",
+      "issuer": "did:example:issuer3",
       "issuanceDate": "2021-09-01T00:00:00Z",
       "expirationDate": "2022-09-01T00:00:00Z",
       "credentialSubject": {
@@ -87,7 +88,7 @@
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
         "created": "2022-10-19T07:57:21Z",
-        "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+        "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
         "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
       }
@@ -103,7 +104,7 @@
       ],
       "id": "http://example.org/credentials/4",
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer2",
+      "issuer": "did:example:issuer4",
       "issuanceDate": "2021-09-01T00:00:00Z",
       "expirationDate": "2022-09-01T00:00:00Z",
       "credentialSubject": {
@@ -116,10 +117,72 @@
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
         "created": "2022-10-19T07:57:21Z",
-        "verificationMethod": "did:example:issuer1#bbs-bls-key1",
+        "verificationMethod": "did:example:issuer4#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
         "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
       }
     }
-  }
+  },
+  {
+    "@id": "http://example.org/graph/5",
+    "@graph": {
+      "@context": [
+        "https://www.w3.org/2018/credentials/v1",
+        "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+        "https://schema.org"
+      ],
+      "type": "VerifiableCredential",
+      "issuer": "did:example:issuer5",
+      "issuanceDate": "2022-01-12T00:00:00Z",
+      "expirationDate": "2023-01-12T00:00:00Z",
+      "credentialSubject": {
+        "id": "did:example:John",
+        "type": "Person",
+        "givenName": "John",
+        "familyName": "Smith",
+        "worksFor": {
+          "id": "did:example:companyX"
+        }
+      },
+      "proof": {
+        "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+        "type": "BbsTermwiseSignature2021",
+        "created": "2022-10-18T06:25:27Z",
+        "verificationMethod": "did:example:issuer5#bbs-bls-key1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+      }
+    }
+  },
+  {
+    "@id": "http://example.org/graph/6",
+    "@graph": {
+      "@context": [
+        "https://www.w3.org/2018/credentials/v1",
+        "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+        "https://schema.org"
+      ],
+      "type": "VerifiableCredential",
+      "issuer": "did:example:issuer6",
+      "issuanceDate": "2022-01-12T00:00:00Z",
+      "expirationDate": "2023-01-12T00:00:00Z",
+      "credentialSubject": {
+        "id": "did:example:companyX",
+        "type": "Organization",
+        "name": "Company X",
+        "location": {
+          "id": "did:example:cityB"
+        },
+        "award": "Awesome 100 Companies"
+      },
+      "proof": {
+        "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
+        "type": "BbsTermwiseSignature2021",
+        "created": "2022-10-18T06:25:27Z",
+        "verificationMethod": "did:example:issuer6#bbs-bls-key1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+      }
+    }
+  }  
 ]

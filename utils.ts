@@ -53,7 +53,7 @@ export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, en
   const generator = new sparqljs.Generator();
   const generatedQuery = generator.stringify(parsedQuery);
   console.log(generatedQuery);
-  
+
   // extract identified graphs from the query result
   const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
   const bindingsArray = await streamToArray(bindingsStream);
@@ -117,3 +117,66 @@ export const streamToArray = <T>(source: RDF.ResultStream<T>): Promise<T[]> => {
     });
   });
 };
+
+export const genJsonResults = (jsonVars: string[], bindingsArray: RDF.Bindings[]) => {
+  type jsonBindingsUriType = {
+    type: 'uri', value: string
+  };
+  type jsonBindingsLiteralType = {
+    type: 'literal', value: string, 'xml:lang'?: string, datatype?: string
+  };
+  type jsonBindingsBnodeType = {
+    type: 'bnode', value: string
+  };
+  type jsonBindingsType = jsonBindingsUriType | jsonBindingsLiteralType | jsonBindingsBnodeType;
+  const isNotNullOrUndefined = <T>(v?: T | null): v is T => null != v;
+
+  const jsonBindingsArray = [];
+  for (const bindings of bindingsArray) {
+    const jsonBindingsEntries: [string, jsonBindingsType][] = [...bindings].map(([k, v]) => {
+      let value: jsonBindingsType;
+      if (v.termType === 'Literal') {
+        if (v.language !== '') {
+          value = {
+            type: 'literal',
+            value: v.value,
+            'xml:lang': v.language
+          };
+        } else if (v.datatype.value === 'http://www.w3.org/2001/XMLSchema#string') {
+          value = {
+            type: 'literal',
+            value: v.value
+          };
+        } else {
+          value = {
+            type: 'literal',
+            value: v.value,
+            datatype: v.datatype.value
+          };
+        }
+      } else if (v.termType === 'NamedNode') {
+        value = {
+          type: 'uri',
+          value: v.value
+        };
+      } else if (v.termType === 'BlankNode') {
+        value = {
+          type: 'bnode',
+          value: v.value
+        };
+      } else {
+        return undefined;
+      };
+      return [k.value, value];
+    }).filter(isNotNullOrUndefined) as [string, jsonBindingsType][];
+    const jsonBindings = Object.fromEntries(jsonBindingsEntries);
+    jsonBindingsArray.push(jsonBindings);
+  }
+  const jsonResults = {
+    "head": { "vars": jsonVars },
+    "results": {
+      "bindings": jsonBindingsArray
+    }
+  };
+  return jsonResults;
+}
