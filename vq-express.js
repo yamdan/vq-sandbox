@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, genJsonResults, getRevealedQuads, identifyCreds, streamToArray } from './utils.js';
+import { extractVars, genJsonResults, getRevealedQuads, identifyCreds, isWildcard, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // JSON-LD context
@@ -109,30 +109,17 @@ app.get('/vsparql/', async (req, res, next) => {
     if (typeof query !== 'string') {
         return next(new Error('SPARQL query must be given as `query` parameter'));
     }
-    // parse and execute SELECT query
-    let parsedQuery;
-    try {
-        parsedQuery = await engine.query(query, { unionDefaultGraph: true });
-    }
-    catch (error) {
-        return next(new Error(`malformed SPARQL query: ${error}`));
-    }
-    if (parsedQuery.resultType !== 'bindings') {
-        return next(new Error('SPARQL query must be SELECT form'));
-    }
-    const bindingsStream = await parsedQuery.execute();
-    const bindingsArray = await streamToArray(bindingsStream);
     // extract variables from SELECT query
     const vars = extractVars(query);
     if (vars == undefined) {
         return next(new Error('SPARQL query must be SELECT form'));
     }
     // identify target credentials based on BGP
-    const credGraphIriToBgpTriples = await identifyCreds(query, df, engine);
-    if (credGraphIriToBgpTriples == undefined) {
+    const identifiedCreds = await identifyCreds(query, df, engine);
+    if (identifiedCreds == undefined) {
         return next(new Error('SPARQL query must be SELECT form')); // TBD
     }
-    console.log(credGraphIriToBgpTriples);
+    const { result: credGraphIriToBgpTriples, bindingsArray } = identifiedCreds;
     // get original credentials
     const credsArray = [];
     for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
@@ -164,7 +151,7 @@ app.get('/vsparql/', async (req, res, next) => {
             // get whole document (without proof)
             const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, query, df, engine);
             if (doc == undefined) {
-                return next(new Error('SPARQL query must be SELECT form')); // TBD
+                return next(new Error('internal error')); // TBD
             }
             // TBD: get proofs
             const proofs = [];
@@ -175,24 +162,25 @@ app.get('/vsparql/', async (req, res, next) => {
         ;
         revealedCredsArray.push(creds);
     }
-    console.dir(revealedCredsArray, { depth: 8 });
     // serialize credentials
-    const credJsons = [];
+    const credJsonsArray = [];
     for (const creds of revealedCredsArray) {
         if (creds == null) {
             return next(new Error('internal error')); // TBD
         }
+        const credJsons = [];
         for (const cred of creds) {
             const credJson = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
             credJsons.push(credJsonCompact);
         }
+        credJsonsArray.push(credJsons);
     }
     // add VP (or VCs) to bindings
-    const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(JSON.stringify(credJsons[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON'))));
+    const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(JSON.stringify(credJsonsArray[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON'))));
     // send response
     let jsonVars;
-    if (vars.length === 1 && 'value' in vars[0] && vars[0].value === '*') {
+    if (isWildcard(vars)) {
         // SELECT * WHERE {...}
         jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
     }

@@ -39,23 +39,25 @@ export const identifyCreds = async (query, df, engine) => {
         [`${GRAPH_VAR_PREFIX}${i}`]: triple
     })));
     // generate a new SELECT query to identify named graphs
-    parsedQuery.variables = [...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`));
+    parsedQuery.distinct = true;
+    if (!isWildcard(parsedQuery.variables)) {
+        parsedQuery.variables = parsedQuery.variables.concat([...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`)));
+    }
     parsedQuery.where = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.concat(graphPatterns);
     const generator = new sparqljs.Generator();
     const generatedQuery = generator.stringify(parsedQuery);
-    console.log(generatedQuery);
     // extract identified graphs from the query result
     const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
     const bindingsArray = await streamToArray(bindingsStream);
     const result = [];
     for (const bindings of bindingsArray) {
-        const graphIriAndGraphVars = [...bindings].map((b) => ([b[1].value, b[0].value]));
+        const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map((b) => ([b[1].value, b[0].value]));
         const graphIriAndBgpTriples = graphIriAndGraphVars.map(([graph, gvar]) => [graph, graphVarToBgpTriple[gvar]]);
         const graphIriToBgpTriples = entriesToMap(graphIriAndBgpTriples);
         result.push(graphIriToBgpTriples);
     }
     ;
-    return result;
+    return { result, bindingsArray };
 };
 export const getRevealedQuads = async (credGraphIri, bgpTriples, query, df, engine) => {
     const parser = new sparqljs.Parser();
@@ -68,12 +70,19 @@ export const getRevealedQuads = async (credGraphIri, bgpTriples, query, df, engi
         type: 'query',
         prefixes: {},
     };
-    parsedQuery.where = parsedSelectQuery.where;
+    const bgpPattern = {
+        type: 'bgp',
+        triples: bgpTriples
+    };
+    const where = [{
+            type: 'graph',
+            patterns: [bgpPattern],
+            name: df.namedNode(credGraphIri)
+        }];
+    parsedQuery.where = where;
     parsedQuery.template = bgpTriples;
     const generator = new sparqljs.Generator();
     const generatedQuery = generator.stringify(parsedQuery);
-    console.log(credGraphIri);
-    console.log(generatedQuery);
     const quadsStream = await engine.queryQuads(generatedQuery, { unionDefaultGraph: true });
     const quadsArray = await streamToArray(quadsStream);
     return quadsArray;
@@ -166,3 +175,4 @@ export const genJsonResults = (jsonVars, bindingsArray) => {
     };
     return jsonResults;
 };
+export const isWildcard = (vars) => vars.length === 1 && 'value' in vars[0] && vars[0].value === '*';
