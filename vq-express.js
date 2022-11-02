@@ -46,30 +46,13 @@ app.disable('x-powered-by');
 app.listen(port, () => {
     console.log('vq-express: started on port 3000');
 });
-// ordinal SPARQL endpoint
-app.get('/sparql/', async (req, res, next) => {
-    // get query string
-    const query = req.query.query;
-    if (typeof query !== 'string') {
-        return next(new Error('SPARQL query must be given as `query` parameter'));
-    }
-    // parse and execute query
-    let parsedQuery;
-    try {
-        parsedQuery = await engine.query(query, { unionDefaultGraph: true });
-    }
-    catch (error) {
-        return next(new Error(`malformed SPARQL query: ${error}`));
-    }
-    if (parsedQuery.resultType !== 'bindings') {
-        return next(new Error('SPARQL query must be SELECT form'));
-    }
+const respondToSelectQuery = async (query, parsedQuery) => {
     const bindingsStream = await parsedQuery.execute();
     const bindingsArray = await streamToArray(bindingsStream);
     // extract variables from SELECT query
     const vars = extractVars(query);
     if (vars == undefined) {
-        return next(new Error('SPARQL query must be SELECT form'));
+        throw new Error('SPARQL query must be SELECT form');
     }
     // send response
     let jsonVars;
@@ -81,7 +64,43 @@ app.get('/sparql/', async (req, res, next) => {
         // SELECT ?s ?p ?o WHERE {...} / SELECT (?s AS ?sub) ?p ?o WHERE {...}
         jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
     }
-    res.send(genJsonResults(jsonVars, bindingsArray));
+    return { jsonVars, bindingsArray };
+};
+const respondToConstructQuery = async (parsedQuery) => {
+    const quadsStream = await parsedQuery.execute();
+    const quadsArray = await streamToArray(quadsStream);
+    const quadsJsonld = await jsonld.fromRDF(quadsArray);
+    const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader: customDocLoader });
+    return quadsJsonldCompact;
+};
+// ordinal SPARQL endpoint
+app.get('/sparql/', async (req, res, next) => {
+    // get query string
+    const query = req.query.query;
+    if (typeof query !== 'string') {
+        return next(new Error('SPARQL query must be given as `query` parameter'));
+    }
+    // parse query
+    let parsedQuery;
+    try {
+        parsedQuery = await engine.query(query, { unionDefaultGraph: true });
+    }
+    catch (error) {
+        return next(new Error(`malformed SPARQL query: ${error}`));
+    }
+    // execute query
+    if (parsedQuery.resultType === 'bindings') {
+        const { jsonVars, bindingsArray } = await respondToSelectQuery(query, parsedQuery);
+        res.send(genJsonResults(jsonVars, bindingsArray));
+    }
+    else if (parsedQuery.resultType === 'quads') {
+        const quadsJsonld = await respondToConstructQuery(parsedQuery);
+        res.contentType('application/json+ld');
+        res.send(quadsJsonld);
+    }
+    else {
+        return next(new Error('SPARQL query must be SELECT form'));
+    }
 });
 // SPARQL endpoint with VPs
 app.get('/vsparql/', async (req, res, next) => {
