@@ -7,7 +7,7 @@ import { Engine } from 'quadstore-comunica';
 import { extractVars, genJsonResults, getRevealedQuads, identifyCreds, isWildcard, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
-// JSON-LD context
+// built-in JSON-LD contexts
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
 import schemaorg from './context/schemaorg.json' assert { type: 'json' };
@@ -73,7 +73,7 @@ const respondToConstructQuery = async (parsedQuery) => {
     const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader: customDocLoader });
     return quadsJsonldCompact;
 };
-// ordinal SPARQL endpoint
+// plain SPARQL endpoint
 app.get('/sparql/', async (req, res, next) => {
     // get query string
     const query = req.query.query;
@@ -102,54 +102,26 @@ app.get('/sparql/', async (req, res, next) => {
         return next(new Error('SPARQL query must be SELECT form'));
     }
 });
-// SPARQL endpoint with VPs
+// verifiable SPARQL endpoint (fetch)
 app.get('/vsparql/', async (req, res, next) => {
     // get query string
     const query = req.query.query;
     if (typeof query !== 'string') {
         return next(new Error('SPARQL query must be given as `query` parameter'));
     }
-    // extract variables from SELECT query
-    const vars = extractVars(query);
-    if (vars == undefined) {
-        return next(new Error('SPARQL query must be SELECT form'));
-    }
     // identify target credentials based on BGP
     const identifiedCreds = await identifyCreds(query, df, engine);
     if (identifiedCreds == undefined) {
-        return next(new Error('SPARQL query must be SELECT form')); // TBD
+        return next(new Error('malformed SPARQL query')); // TBD
     }
     const { result: credGraphIriToBgpTriples, bindingsArray } = identifiedCreds;
-    // get original credentials
-    const credsArray = [];
-    for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
-        const creds = [];
-        for (const credGraphIri of credGraphIriToBgpTriple.keys()) {
-            // get whole document (without proof)
-            const { items: docWithGraphIri } = await store.get({ graph: df.namedNode(credGraphIri) });
-            const doc = docWithGraphIri.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
-            // get proofs
-            const { items: proofIdQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIri) });
-            const proofs = [];
-            for (const proofId of proofIdQuads.map((proofIdQuad) => proofIdQuad.object.value)) {
-                const { items: proofQuads } = await store.get({ graph: df.blankNode(proofId) });
-                proofs.push(proofQuads);
-            }
-            creds.push({
-                doc, proofs
-            });
-        }
-        ;
-        credsArray.push(creds);
-    }
-    ;
     // get revealed credentials
     const revealedCredsArray = [];
     for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
         const creds = [];
         for (const [revealedCredGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
-            // get whole document (without proof)
-            const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, query, df, engine);
+            // get revealed document (without proof)
+            const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, df, engine);
             if (doc == undefined) {
                 return next(new Error('internal error')); // TBD
             }
@@ -178,6 +150,11 @@ app.get('/vsparql/', async (req, res, next) => {
     }
     // add VP (or VCs) to bindings
     const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(JSON.stringify(credJsonsArray[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON'))));
+    // extract variables from SELECT query
+    const vars = extractVars(query);
+    if (vars == undefined) {
+        return next(new Error('malformed SPARQL query'));
+    }
     // send response
     let jsonVars;
     if (isWildcard(vars)) {
@@ -192,4 +169,34 @@ app.get('/vsparql/', async (req, res, next) => {
     res.send(genJsonResults(jsonVars, bindingsWithVPArray));
     // run rdf-signatures-bbs to get derived proofs
     // attach derived proofs
+});
+// verifiable SPARQL endpoint (derive proofs)
+app.get('/deriveProof/', async (req, res, next) => {
+    // request
+    //   - (credGraphIri, revealed doc)[]
+    //   - hidden iris
+    // response
+    //   - vp
+    // // get original credentials
+    // // TBD: unnecessary in fetching stage
+    // const credsArray = [];
+    // for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
+    //   const creds = [];
+    //   for (const credGraphIri of credGraphIriToBgpTriple.keys()) {
+    //     // get whole document (without proof)
+    //     const { items: docWithGraphIri } = await store.get({ graph: df.namedNode(credGraphIri) });
+    //     const doc = docWithGraphIri.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
+    //     // get proofs
+    //     const { items: proofIdQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIri) });
+    //     const proofs = [];
+    //     for (const proofId of proofIdQuads.map((proofIdQuad: RDF.Quad) => proofIdQuad.object.value)) {
+    //       const { items: proofQuads } = await store.get({ graph: df.blankNode(proofId) });
+    //       proofs.push(proofQuads);
+    //     }
+    //     creds.push({
+    //       doc, proofs
+    //     });
+    //   };
+    //   credsArray.push(creds);
+    // };
 });

@@ -82,7 +82,7 @@
         "id": "did:example:cityA",
         "type": "Place",
         "name": "City A",
-        "maximumAttendeeCapacity": 10000
+        "maximumAttendeeCapacity": [10000, 1]
       },
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",

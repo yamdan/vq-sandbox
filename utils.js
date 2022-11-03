@@ -3,19 +3,30 @@ import sparqljs from 'sparqljs';
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
 export const extractVars = (query) => {
     const parser = new sparqljs.Parser();
-    const parsedQuery = parser.parse(query);
-    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+    try {
+        const parsedQuery = parser.parse(query);
+        if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+            return undefined;
+        }
+        return parsedQuery.variables;
+    }
+    catch (error) {
         return undefined;
     }
-    return parsedQuery.variables;
 };
 // identify credentials related to the given query
 export const identifyCreds = async (query, df, engine) => {
     var _a, _b;
     // parse the original SELECT query to get Basic Graph Pattern (BGP)
     const parser = new sparqljs.Parser();
-    const parsedQuery = parser.parse(query);
-    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+    let parsedQuery;
+    try {
+        parsedQuery = parser.parse(query);
+        if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
+            return undefined;
+        }
+    }
+    catch (error) {
         return undefined;
     }
     const bgpPattern = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp')[0];
@@ -54,17 +65,13 @@ export const identifyCreds = async (query, df, engine) => {
         const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map((b) => ([b[1].value, b[0].value]));
         const graphIriAndBgpTriples = graphIriAndGraphVars.map(([graph, gvar]) => [graph, graphVarToBgpTriple[gvar]]);
         const graphIriToBgpTriples = entriesToMap(graphIriAndBgpTriples);
+        // const graphIriToTriples = ...
         result.push(graphIriToBgpTriples);
     }
     ;
     return { result, bindingsArray };
 };
-export const getRevealedQuads = async (credGraphIri, bgpTriples, query, df, engine) => {
-    const parser = new sparqljs.Parser();
-    const parsedSelectQuery = parser.parse(query);
-    if (!(parsedSelectQuery.type === 'query' && parsedSelectQuery.queryType === 'SELECT')) {
-        return undefined;
-    }
+export const getRevealedQuads = async (credGraphIri, bgpTriples, df, engine) => {
     const parsedQuery = {
         queryType: 'CONSTRUCT',
         type: 'query',
