@@ -114,35 +114,26 @@ app.get('/vsparql/', async (req, res, next) => {
     if (identifiedCreds == undefined) {
         return next(new Error('malformed SPARQL query')); // TBD
     }
-    const { result: credGraphIriToBgpTriples, bindingsArray } = identifiedCreds;
+    const { credGraphIriToBgpTriples, bindingsArray, whereWithoutBgp } = identifiedCreds;
     // get revealed credentials
     const revealedCredsArray = [];
     for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
-        const creds = [];
-        for (const [revealedCredGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
-            // get revealed document (without proof)
-            const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, df, engine);
-            if (doc == undefined) {
-                return next(new Error('internal error')); // TBD
-            }
-            // TBD: get proofs
-            const proofs = [];
-            creds.push({
-                doc, proofs
-            });
-        }
-        ;
+        // get revealed documents (without proofs)
+        const docs = await getRevealedQuads(credGraphIriToBgpTriple, whereWithoutBgp, df, engine);
+        const creds = docs; // TBD: add associated proofs
         revealedCredsArray.push(creds);
     }
+    ;
+    // - for revealedCreds in revealedCredsArray:
+    //   - add credential metadata
+    //   - get associated proofs
     // serialize credentials
     const credJsonsArray = [];
     for (const creds of revealedCredsArray) {
-        if (creds == null) {
-            return next(new Error('internal error')); // TBD
-        }
         const credJsons = [];
-        for (const cred of creds) {
-            const credJson = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
+        for (const [_credGraphIri, cred] of creds) {
+            const distinctQuads = cred.filter((quad1, index, self) => index === self.findIndex((quad2) => (quad1.equals(quad2))));
+            const credJson = await jsonld.fromRDF(distinctQuads);
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
             credJsons.push(credJsonCompact);
         }

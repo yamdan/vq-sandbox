@@ -129,36 +129,30 @@ app.get('/vsparql/', async (req, res, next) => {
   if (identifiedCreds == undefined) {
     return next(new Error('malformed SPARQL query')); // TBD
   }
-  const { result: credGraphIriToBgpTriples, bindingsArray } = identifiedCreds;
+  const { credGraphIriToBgpTriples, bindingsArray, whereWithoutBgp } = identifiedCreds;
 
   // get revealed credentials
-  const revealedCredsArray = [];
+  const revealedCredsArray: Map<string, RDF.Quad[]>[] = [];
   for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
-    const creds = [];
-    for (const [revealedCredGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
-      // get revealed document (without proof)
-      const doc = await getRevealedQuads(revealedCredGraphIri, bgpTriples, df, engine);
-      if (doc == undefined) {
-        return next(new Error('internal error')); // TBD
-      }
-      // TBD: get proofs
-      const proofs: any = [];
-      creds.push({
-        doc, proofs
-      });
-    };
+    // get revealed documents (without proofs)
+    const docs = await getRevealedQuads(credGraphIriToBgpTriple, whereWithoutBgp, df, engine);
+    const creds = docs; // TBD: add associated proofs
     revealedCredsArray.push(creds);
-  }
+  };
+
+  // - for revealedCreds in revealedCredsArray:
+  //   - add credential metadata
+  //   - get associated proofs
 
   // serialize credentials
   const credJsonsArray: jsonld.NodeObject[][] = [];
   for (const creds of revealedCredsArray) {
-    if (creds == null) {
-      return next(new Error('internal error')); // TBD
-    }
     const credJsons: jsonld.NodeObject[] = [];
-    for (const cred of creds) {
-      const credJson = await jsonld.fromRDF(cred.doc.concat(cred.proofs.flat()));
+    for (const [_credGraphIri, cred] of creds) {
+      // remove duplicated quads
+      const distinctQuads = cred.filter((quad1, index, self) =>
+        index === self.findIndex((quad2) => (quad1.equals(quad2))));
+      const credJson = await jsonld.fromRDF(distinctQuads);
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
       credJsons.push(credJsonCompact);
     }
@@ -175,9 +169,9 @@ app.get('/vsparql/', async (req, res, next) => {
   if (vars == undefined) {
     return next(new Error('malformed SPARQL query'));
   }
-  
+
   // send response
-  let jsonVars: string[];  
+  let jsonVars: string[];
   if (isWildcard(vars)) {
     // SELECT * WHERE {...}
     jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
