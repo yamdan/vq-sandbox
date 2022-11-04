@@ -14,10 +14,9 @@ export const extractVars = (query) => {
         return undefined;
     }
 };
-// identify credentials related to the given query
-export const identifyCreds = async (query, df, engine) => {
-    var _a, _b, _c;
-    // parse the original SELECT query to get Basic Graph Pattern (BGP)
+// parse the original SELECT query to get Basic Graph Pattern (BGP)
+export const parseQuery = (query) => {
+    var _a, _b;
     const parser = new sparqljs.Parser();
     let parsedQuery;
     try {
@@ -32,6 +31,14 @@ export const identifyCreds = async (query, df, engine) => {
     const bgpPattern = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp')[0];
     const bgpTriples = bgpPattern.triples;
     const whereWithoutBgp = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.filter((p) => p.type !== 'bgp');
+    const gVarToBgpTriple = Object.assign({}, ...bgpTriples.map((triple, i) => ({
+        [`${GRAPH_VAR_PREFIX}${i}`]: triple
+    })));
+    return { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple };
+};
+// identify credentials related to the given query
+export const getExtendedBindings = async (parsedQuery, bgpTriples, df, engine) => {
+    var _a;
     // create graph patterns based on BGPs 
     const graphPatterns = bgpTriples.map((triple, i) => {
         const patterns = [
@@ -47,33 +54,27 @@ export const identifyCreds = async (query, df, engine) => {
             name
         };
     });
-    // prepare mapping from graph variables to triples
-    const graphVarToBgpTriple = Object.assign({}, ...bgpTriples.map((triple, i) => ({
-        [`${GRAPH_VAR_PREFIX}${i}`]: triple
-    })));
     // generate a new SELECT query to identify named graphs
     parsedQuery.distinct = true;
     if (!isWildcard(parsedQuery.variables)) {
         parsedQuery.variables = parsedQuery.variables.concat([...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`)));
     }
-    parsedQuery.where = (_c = parsedQuery.where) === null || _c === void 0 ? void 0 : _c.concat(graphPatterns); // update WHERE
+    parsedQuery.where = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.concat(graphPatterns); // update WHERE
     const generator = new sparqljs.Generator();
     const generatedQuery = generator.stringify(parsedQuery);
     // extract identified graphs from the query result
     const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
     const bindingsArray = await streamToArray(bindingsStream);
-    const credGraphIriToBgpTriples = [];
-    for (const bindings of bindingsArray) {
-        const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map(([gVar, gIri]) => [gIri.value, gVar.value]);
-        const graphIriAndBgpTriples = graphIriAndGraphVars.map(([gIri, gVar]) => [gIri, graphVarToBgpTriple[gVar]]);
-        const graphIriToBgpTriples = entriesToMap(graphIriAndBgpTriples);
-        credGraphIriToBgpTriples.push(graphIriToBgpTriples);
-    }
-    ;
-    return { credGraphIriToBgpTriples, bindingsArray, whereWithoutBgp };
+    return bindingsArray;
 };
-export const getRevealedQuads = async (credGraphIriToBgpTriple, whereWithoutBgp, df, engine) => {
-    const graphPatterns = [...credGraphIriToBgpTriple.entries()].map(([credGraphIri, bgpTriples]) => {
+export const identifyCreds = (bindings, gVarToBgpTriple) => {
+    const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map(([gVar, gIri]) => [gIri.value, gVar.value]);
+    const graphIriAndBgpTriples = graphIriAndGraphVars.map(([gIri, gVar]) => [gIri, gVarToBgpTriple[gVar]]);
+    const graphIriToBgpTriple = entriesToMap(graphIriAndBgpTriples);
+    return ({ bindings, graphIriToBgpTriple });
+};
+export const getRevealedQuads = async (graphIriToBgpTriple, bindings, whereWithoutBgp, vars, df, engine) => {
+    const graphPatterns = [...graphIriToBgpTriple.entries()].map(([credGraphIri, bgpTriples]) => {
         const bgpPattern = {
             type: 'bgp',
             triples: bgpTriples
@@ -86,23 +87,36 @@ export const getRevealedQuads = async (credGraphIriToBgpTriple, whereWithoutBgp,
         return graphPattern;
     });
     const where = whereWithoutBgp ? graphPatterns.concat(whereWithoutBgp) : graphPatterns;
-    const parsedQuery = {
+    const constructQueryObj = {
         queryType: 'CONSTRUCT',
         type: 'query',
         prefixes: {},
     };
-    parsedQuery.where = where;
+    constructQueryObj.where = where;
+    const anonymizedQueryObj = {
+        queryType: 'CONSTRUCT',
+        type: 'query',
+        prefixes: {},
+    };
+    anonymizedQueryObj.where = where;
     const result = new Map();
-    for (const [credGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
-        parsedQuery.template = bgpTriples;
+    for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
         const generator = new sparqljs.Generator();
-        const generatedQuery = generator.stringify(parsedQuery);
-        const quadsStream = await engine.queryQuads(generatedQuery, { unionDefaultGraph: true });
-        const quadsArray = await streamToArray(quadsStream);
-        result.set(credGraphIri, quadsArray);
+        // CONSTRUCT
+        constructQueryObj.template = bgpTriples;
+        const constructQuery = generator.stringify(constructQueryObj);
+        const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
+        const quads = deduplicateQuads(await streamToArray(quadsStream));
+        // CONSTRUCT with anonymized IRIs
+        anonymizedQueryObj.template = bgpTriples; // TBD
+        const anonymizedQuery = generator.stringify(anonymizedQueryObj);
+        const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
+        const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
+        result.set(credGraphIri, [quads, anonymizedQuads]);
     }
     return result;
 };
+export const deduplicateQuads = (quads) => quads.filter((quad1, index, self) => index === self.findIndex((quad2) => (quad1.equals(quad2))));
 // utility function from [string, T][] to Map<string, T[]>
 export const entriesToMap = (entries) => {
     var _a;

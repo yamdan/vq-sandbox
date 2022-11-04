@@ -5,7 +5,8 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, genJsonResults, getRevealedQuads, identifyCreds, isWildcard, streamToArray } from './utils.js';
+import sparqljs from 'sparqljs';
+import { extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -54,7 +55,7 @@ const app = express();
 const port = 3000;
 app.disable('x-powered-by');
 app.listen(port, () => {
-  console.log('vq-express: started on port 3000');
+  console.log('started on port 3000');
 });
 
 const respondToSelectQuery = async (query: string, parsedQuery: RDF.QueryBindings<RDF.AllMetadataSupport>) => {
@@ -124,35 +125,44 @@ app.get('/vsparql/', async (req, res, next) => {
     return next(new Error('SPARQL query must be given as `query` parameter'));
   }
 
-  // identify target credentials based on BGP
-  const identifiedCreds = await identifyCreds(query, df, engine);
-  if (identifiedCreds == undefined) {
-    return next(new Error('malformed SPARQL query')); // TBD
+  // extract variables from SELECT query
+  const vars = extractVars(query);
+  if (vars == undefined) {
+    return next(new Error('malformed SPARQL query'));
   }
-  const { credGraphIriToBgpTriples, bindingsArray, whereWithoutBgp } = identifiedCreds;
+
+  // parse SELECT query
+  const parseResult = parseQuery(query);
+  if (parseResult == null) {
+    return next(new Error('malformed SPARQL query')); // TBD
+  };
+  const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
+
+  // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
+  const bindingsArray = await getExtendedBindings(parsedQuery, bgpTriples, df, engine);
 
   // get revealed credentials
-  const revealedCredsArray: Map<string, RDF.Quad[]>[] = [];
-  for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
-    // get revealed documents (without proofs)
-    const docs = await getRevealedQuads(credGraphIriToBgpTriple, whereWithoutBgp, df, engine);
-    const creds = docs; // TBD: add associated proofs
-    revealedCredsArray.push(creds);
-  };
+  const revealedCredsArray = await Promise.all(
+    bindingsArray
+      .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
+      .map(async ({ bindings, graphIriToBgpTriple }) => {
+        // get revealed documents (without proofs)
+        const docs = await getRevealedQuads(graphIriToBgpTriple, bindings, whereWithoutBgp, vars, df, engine);
+        const creds = docs; // TBD: add associated proofs
+        return creds;
+      }));
 
   // - for revealedCreds in revealedCredsArray:
   //   - add credential metadata
+  //   - hide unspecified variables
   //   - get associated proofs
 
   // serialize credentials
   const credJsonsArray: jsonld.NodeObject[][] = [];
   for (const creds of revealedCredsArray) {
     const credJsons: jsonld.NodeObject[] = [];
-    for (const [_credGraphIri, cred] of creds) {
-      // remove duplicated quads
-      const distinctQuads = cred.filter((quad1, index, self) =>
-        index === self.findIndex((quad2) => (quad1.equals(quad2))));
-      const credJson = await jsonld.fromRDF(distinctQuads);
+    for (const [_credGraphIri, [_cred, anonymizedCred]] of creds) {
+      const credJson = await jsonld.fromRDF(anonymizedCred);
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
       credJsons.push(credJsonCompact);
     }
@@ -163,12 +173,6 @@ app.get('/vsparql/', async (req, res, next) => {
   const bindingsWithVPArray = bindingsArray.map((bindings, i) =>
     bindings.set('vp', df.literal(JSON.stringify(credJsonsArray[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON')))
   );
-
-  // extract variables from SELECT query
-  const vars = extractVars(query);
-  if (vars == undefined) {
-    return next(new Error('malformed SPARQL query'));
-  }
 
   // send response
   let jsonVars: string[];

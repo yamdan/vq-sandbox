@@ -2,9 +2,15 @@ import { DataFactory } from 'rdf-data-factory';
 import { Engine } from 'quadstore-comunica';
 import type * as RDF from '@rdfjs/types';
 import sparqljs from 'sparqljs';
+import { v4 as uuidv4 } from "uuid";
 
 // Constants
 const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
+
+type IdentifyCredsResultType = {
+  bindings: RDF.Bindings,
+  graphIriToBgpTriple: Map<string, sparqljs.Triple[]>,
+};
 
 export const extractVars = (query: string) => {
   const parser = new sparqljs.Parser();
@@ -19,9 +25,8 @@ export const extractVars = (query: string) => {
   }
 }
 
-// identify credentials related to the given query
-export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, engine: Engine) => {
-  // parse the original SELECT query to get Basic Graph Pattern (BGP)
+// parse the original SELECT query to get Basic Graph Pattern (BGP)
+export const parseQuery = (query: string) => {
   const parser = new sparqljs.Parser();
   let parsedQuery;
   try {
@@ -32,9 +37,24 @@ export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, en
   } catch (error) {
     return undefined;
   }
+
   const bgpPattern = parsedQuery.where?.filter((p) => p.type === 'bgp')[0] as sparqljs.BgpPattern;
   const bgpTriples = bgpPattern.triples;
   const whereWithoutBgp = parsedQuery.where?.filter((p) => p.type !== 'bgp');
+  const gVarToBgpTriple: Record<string, sparqljs.Triple> = Object.assign({}, ...bgpTriples.map((triple, i) => ({
+    [`${GRAPH_VAR_PREFIX}${i}`]: triple
+  })));
+
+  return { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple };
+}
+
+// identify credentials related to the given query
+export const getExtendedBindings = async (
+  parsedQuery: sparqljs.SelectQuery,
+  bgpTriples: sparqljs.Triple[],
+  df: DataFactory<RDF.Quad>,
+  engine: Engine
+) => {
   // create graph patterns based on BGPs 
   const graphPatterns: sparqljs.GraphPattern[] = bgpTriples.map((triple, i) => {
     const patterns: sparqljs.BgpPattern[] = [
@@ -51,11 +71,6 @@ export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, en
     };
   });
 
-  // prepare mapping from graph variables to triples
-  const graphVarToBgpTriple: Record<string, sparqljs.Triple> = Object.assign({}, ...bgpTriples.map((triple, i) => ({
-    [`${GRAPH_VAR_PREFIX}${i}`]: triple
-  })));
-
   // generate a new SELECT query to identify named graphs
   parsedQuery.distinct = true;
   if (!isWildcard(parsedQuery.variables)) {
@@ -69,18 +84,28 @@ export const identifyCreds = async (query: string, df: DataFactory<RDF.Quad>, en
   const bindingsStream = await engine.queryBindings(generatedQuery, { unionDefaultGraph: true });
   const bindingsArray = await streamToArray(bindingsStream);
 
-  const credGraphIriToBgpTriples: Map<string, sparqljs.Triple[]>[] = [];
-  for (const bindings of bindingsArray) {
-    const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map(([gVar, gIri]) => [gIri.value, gVar.value]);
-    const graphIriAndBgpTriples: [string, sparqljs.Triple][] = graphIriAndGraphVars.map(([gIri, gVar]) => [gIri, graphVarToBgpTriple[gVar]]);
-    const graphIriToBgpTriples = entriesToMap(graphIriAndBgpTriples);
-    credGraphIriToBgpTriples.push(graphIriToBgpTriples);
-  };
-  return { credGraphIriToBgpTriples, bindingsArray, whereWithoutBgp };
+  return bindingsArray;
 };
 
-export const getRevealedQuads = async (credGraphIriToBgpTriple: Map<string, sparqljs.Triple[]>, whereWithoutBgp: sparqljs.Pattern[] | undefined, df: DataFactory<RDF.Quad>, engine: Engine) => {
-  const graphPatterns: sparqljs.Pattern[] = [...credGraphIriToBgpTriple.entries()].map(([credGraphIri, bgpTriples]) => {
+export const identifyCreds = (
+  bindings: RDF.Bindings,
+  gVarToBgpTriple: Record<string, sparqljs.Triple>,
+): IdentifyCredsResultType => {
+  const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map(([gVar, gIri]) => [gIri.value, gVar.value]);
+  const graphIriAndBgpTriples: [string, sparqljs.Triple][] = graphIriAndGraphVars.map(([gIri, gVar]) => [gIri, gVarToBgpTriple[gVar]]);
+  const graphIriToBgpTriple = entriesToMap(graphIriAndBgpTriples);
+  return ({ bindings, graphIriToBgpTriple });
+};
+
+export const getRevealedQuads = async (
+  graphIriToBgpTriple: Map<string, sparqljs.Triple[]>,
+  bindings: RDF.Bindings,
+  whereWithoutBgp: sparqljs.Pattern[] | undefined,
+  vars: sparqljs.Variable[] | [sparqljs.Wildcard],
+  df: DataFactory<RDF.Quad>,
+  engine: Engine
+) => {
+  const graphPatterns: sparqljs.Pattern[] = [...graphIriToBgpTriple.entries()].map(([credGraphIri, bgpTriples]) => {
     const bgpPattern: sparqljs.BgpPattern =
     {
       type: 'bgp',
@@ -95,24 +120,43 @@ export const getRevealedQuads = async (credGraphIriToBgpTriple: Map<string, spar
   });
   const where = whereWithoutBgp ? graphPatterns.concat(whereWithoutBgp) : graphPatterns;
 
-  const parsedQuery: sparqljs.ConstructQuery = {
+  const constructQueryObj: sparqljs.ConstructQuery = {
     queryType: 'CONSTRUCT',
     type: 'query',
     prefixes: {},
   };
-  parsedQuery.where = where;
+  constructQueryObj.where = where;
+  const anonymizedQueryObj: sparqljs.ConstructQuery = {
+    queryType: 'CONSTRUCT',
+    type: 'query',
+    prefixes: {},
+  };
+  anonymizedQueryObj.where = where;
 
-  const result = new Map<string, RDF.Quad[]>();
-  for (const [credGraphIri, bgpTriples] of credGraphIriToBgpTriple.entries()) {
-    parsedQuery.template = bgpTriples;
+  const result = new Map<string, [RDF.Quad[], RDF.Quad[]]>();
+  for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
     const generator = new sparqljs.Generator();
-    const generatedQuery = generator.stringify(parsedQuery);
-    const quadsStream = await engine.queryQuads(generatedQuery, { unionDefaultGraph: true });
-    const quadsArray = await streamToArray(quadsStream);
-    result.set(credGraphIri, quadsArray);
+
+    // CONSTRUCT
+    constructQueryObj.template = bgpTriples;
+    const constructQuery = generator.stringify(constructQueryObj);
+    const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
+    const quads = deduplicateQuads(await streamToArray(quadsStream));
+
+    // CONSTRUCT with anonymized IRIs
+    anonymizedQueryObj.template = bgpTriples;  // TBD
+    const anonymizedQuery = generator.stringify(anonymizedQueryObj);
+    const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
+    const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
+
+    result.set(credGraphIri, [quads, anonymizedQuads]);
   }
   return result;
 };
+
+export const deduplicateQuads = (quads: RDF.Quad[]) =>
+  quads.filter((quad1, index, self) =>
+    index === self.findIndex((quad2) => (quad1.equals(quad2))));
 
 // utility function from [string, T][] to Map<string, T[]>
 export const entriesToMap = <T>(entries: [string, T][]) => {
