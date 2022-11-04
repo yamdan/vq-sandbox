@@ -76,7 +76,9 @@ export const getExtendedBindings = async (
   if (!isWildcard(parsedQuery.variables)) {
     parsedQuery.variables = parsedQuery.variables.concat([...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`)));
   }
-  parsedQuery.where = parsedQuery.where?.concat(graphPatterns); // update WHERE
+  //parsedQuery.where = parsedQuery.where?.concat(graphPatterns);
+  parsedQuery.where = parsedQuery.where?.filter((p) => p.type !== 'bgp').concat(graphPatterns);
+
   const generator = new sparqljs.Generator();
   const generatedQuery = generator.stringify(parsedQuery);
 

@@ -59,7 +59,8 @@ export const getExtendedBindings = async (parsedQuery, bgpTriples, df, engine) =
     if (!isWildcard(parsedQuery.variables)) {
         parsedQuery.variables = parsedQuery.variables.concat([...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`)));
     }
-    parsedQuery.where = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.concat(graphPatterns); // update WHERE
+    //parsedQuery.where = parsedQuery.where?.concat(graphPatterns);
+    parsedQuery.where = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type !== 'bgp').concat(graphPatterns);
     const generator = new sparqljs.Generator();
     const generatedQuery = generator.stringify(parsedQuery);
     // extract identified graphs from the query result
