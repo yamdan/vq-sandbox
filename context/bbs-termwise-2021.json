@@ -9,11 +9,11 @@
       "@container": "@graph"
     },
     "range": "https://zkp-ld.org/security#range",
-    "an-i": {
+    "anoni": {
       "@id": "https://zkp-ld.org/.well-known/genid/anonymous/iri#",
       "@prefix": true
     },
-    "an-b": {
+    "anonb": {
       "@id": "https://zkp-ld.org/.well-known/genid/anonymous/bnid#",
       "@prefix": true
     },

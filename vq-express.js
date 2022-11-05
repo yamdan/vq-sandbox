@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -124,14 +124,16 @@ app.get('/vsparql/', async (req, res, next) => {
     const graphPatterns = genGraphPatterns(bgpTriples, df);
     const bindingsArray = await getExtendedBindings(parsedQuery, graphPatterns, df, engine);
     // get revealed credentials
+    const anonymizer = new Anonymizer(df);
     const revealedCredsArray = await Promise.all(bindingsArray
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
         .map(async ({ bindings, graphIriToBgpTriple }) => {
         // get revealed documents (without proofs)
-        const docs = await getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine);
+        const docs = await getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer);
         const creds = docs; // TBD: add associated proofs
         return creds;
     }));
+    console.dir(anonymizer, { depth: 8 });
     // - for revealedCreds in revealedCredsArray:
     //   - add credential metadata
     //   - hide unspecified variables

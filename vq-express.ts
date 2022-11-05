@@ -6,7 +6,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 import sparqljs from 'sparqljs';
-import { extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -144,6 +144,7 @@ app.get('/vsparql/', async (req, res, next) => {
     parsedQuery, graphPatterns, df, engine);
 
   // get revealed credentials
+  const anonymizer = new Anonymizer(df);
   const revealedCredsArray = await Promise.all(
     bindingsArray
       .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
@@ -156,11 +157,13 @@ app.get('/vsparql/', async (req, res, next) => {
           whereWithoutBgp,
           vars,
           df,
-          engine);
+          engine,
+          anonymizer);
         const creds = docs; // TBD: add associated proofs
         return creds;
       }));
-
+  console.dir(anonymizer, {depth: 8});
+  
   // - for revealedCreds in revealedCredsArray:
   //   - add credential metadata
   //   - hide unspecified variables

@@ -1,5 +1,5 @@
 import sparqljs from 'sparqljs';
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from 'nanoid';
 // Constants
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
 ;
@@ -80,7 +80,10 @@ export const identifyCreds = (bindings, gVarToBgpTriple) => {
     const graphIriToBgpTriple = entriesToMap(graphIriAndBgpTriples);
     return ({ bindings, graphIriToBgpTriple });
 };
-export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine) => {
+export const isAnonymizableTerm = (t) => (t.termType === 'NamedNode'
+    || t.termType === 'BlankNode'
+    || t.termType === 'Literal');
+export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer) => {
     const constructQueryObj = {
         queryType: 'CONSTRUCT',
         type: 'query',
@@ -115,7 +118,7 @@ export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindi
             anonymizedQueryObj.template = bgpTriples;
         }
         else {
-            anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df);
+            anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df, anonymizer);
         }
         const anonymizedQuery = generator.stringify(anonymizedQueryObj);
         const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
@@ -124,44 +127,94 @@ export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindi
     }
     return result;
 };
-const anonymizeBgpTriples = (bgpTriples, vars, bindings, df) => bgpTriples.map((triple) => {
-    const varNames = vars.map((v) => 'expression' in v ? v.variable.value : v.value);
-    const _anonymize = (term) => term.termType === 'Variable' && !varNames.includes(term.value) ?
-        df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/iri#${uuidv4()}`) :
-        df.fromTerm(term);
-    const subject = _anonymize(triple.subject);
-    const predicate = _anonymize(triple.predicate);
-    const _anonymizeObj = (term) => {
-        if (term.termType === 'Variable' && !varNames.includes(term.value)) {
-            const val = bindings.get(term);
-            if (val == undefined) {
-                return df.fromTerm(term); // TBD
+const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
+const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnode#';
+const ANONL_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/literal#';
+const NANOID_LEN = 8;
+export class Anonymizer {
+    constructor(df) {
+        this.anonymize = (varName, val) => {
+            const result = this.varToAnon.get([varName, val]);
+            if (result != undefined) {
+                return result;
+            }
+            const anon = this.df.namedNode(`${ANONI_PREFIX}${nanoid(NANOID_LEN)}`);
+            this.varToAnon.set([varName, val], anon);
+            return anon;
+        };
+        this.anonymizeObject = (varName, val) => {
+            let anon;
+            if (val.termType === 'NamedNode') {
+                const result = this.varToAnon.get([varName, val]);
+                if (result != undefined) {
+                    return result;
+                }
+                anon = this.df.namedNode(`${ANONI_PREFIX}${nanoid(NANOID_LEN)}`);
+                this.varToAnon.set([varName, val], anon);
+            }
+            else if (val.termType === 'BlankNode') {
+                const result = this.varToAnonBlank.get([varName, val]);
+                if (result != undefined) {
+                    return result;
+                }
+                anon = this.df.namedNode(`${ANONB_PREFIX}${nanoid(NANOID_LEN)}`);
+                this.varToAnonBlank.set([varName, val], anon);
             }
             else {
-                if (val.termType === 'NamedNode') {
-                    return df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/iri#${uuidv4()}`);
+                const result = this.varToAnonLiteral.get([varName, val]);
+                if (result != undefined) {
+                    return result;
                 }
-                else if (val.termType === 'BlankNode') {
-                    return df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/bnid#${uuidv4()}`);
-                }
-                else if (val.termType === 'Literal') {
-                    if (val.language !== '') {
-                        return df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${uuidv4()}`, val.language);
-                    }
-                    else {
-                        return df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${uuidv4()}`, val.datatype);
-                    }
+                if (val.language !== '') {
+                    anon = this.df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${nanoid(8)}`, val.language);
+                    this.varToAnonLiteral.set([varName, val], anon);
                 }
                 else {
-                    return df.fromTerm(term); // TBD
+                    anon = this.df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${nanoid(8)}`, val.datatype);
+                    this.varToAnonLiteral.set([varName, val], anon);
                 }
+            }
+            return anon;
+        };
+        this.varToAnon = new Map();
+        this.varToAnonBlank = new Map();
+        this.varToAnonLiteral = new Map();
+        this.df = df;
+    }
+}
+const anonymizeBgpTriples = (bgpTriples, vars, bindings, df, anonymizer) => bgpTriples.map((triple) => {
+    const varNames = vars.map((v) => 'expression' in v ? v.variable.value : v.value);
+    const _anonymize = (term) => {
+        if (term.termType === 'Variable' && !varNames.includes(term.value)) {
+            const val = bindings.get(term);
+            if (val != undefined && isAnonymizableTerm(val)) {
+                return anonymizer.anonymize(term.value, val);
+            }
+            else {
+                return df.fromTerm(term); // TBD
             }
         }
         else {
             return df.fromTerm(term);
         }
     };
-    const object = _anonymizeObj(triple.object);
+    const subject = _anonymize(triple.subject);
+    const predicate = _anonymize(triple.predicate);
+    const _anonymizeObject = (term) => {
+        if (term.termType === 'Variable' && !varNames.includes(term.value)) {
+            const val = bindings.get(term);
+            if (val != undefined && isAnonymizableTerm(val)) {
+                return anonymizer.anonymizeObject(term.value, val);
+            }
+            else {
+                return df.fromTerm(term); // TBD
+            }
+        }
+        else {
+            return df.fromTerm(term);
+        }
+    };
+    const object = _anonymizeObject(triple.object);
     return {
         subject, predicate, object
     };
