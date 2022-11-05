@@ -258,7 +258,7 @@ declare module "sparqljs" {
   }
 
   export interface ValuePatternRow {
-    [variable: string]: IriTerm | BlankTerm | LiteralTerm | undefined;
+    [variable: string]: IriTerm | LiteralTerm | undefined;
   }
 
   export interface Triple {

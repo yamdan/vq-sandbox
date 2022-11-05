@@ -9,6 +9,14 @@
       "@container": "@graph"
     },
     "range": "https://zkp-ld.org/security#range",
+    "an-i": {
+      "@id": "https://zkp-ld.org/.well-known/genid/anonymous/iri#",
+      "@prefix": true
+    },
+    "an-b": {
+      "@id": "https://zkp-ld.org/.well-known/genid/anonymous/bnid#",
+      "@prefix": true
+    },
     "BbsTermwiseSignature2021": {
       "@id": "https://zkp-ld.org/security#BbsTermwiseSignature2021",
       "@context": {

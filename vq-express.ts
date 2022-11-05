@@ -6,7 +6,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 import sparqljs from 'sparqljs';
-import { extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -133,13 +133,15 @@ app.get('/vsparql/', async (req, res, next) => {
 
   // parse SELECT query
   const parseResult = parseQuery(query);
-  if (parseResult == null) {
+  if ('error' in parseResult) {
     return next(new Error('malformed SPARQL query')); // TBD
-  };
+  }
   const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
 
   // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
-  const bindingsArray = await getExtendedBindings(parsedQuery, bgpTriples, df, engine);
+  const graphPatterns = genGraphPatterns(bgpTriples, df);
+  const bindingsArray = await getExtendedBindings(
+    parsedQuery, graphPatterns, df, engine);
 
   // get revealed credentials
   const revealedCredsArray = await Promise.all(
@@ -147,7 +149,14 @@ app.get('/vsparql/', async (req, res, next) => {
       .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
       .map(async ({ bindings, graphIriToBgpTriple }) => {
         // get revealed documents (without proofs)
-        const docs = await getRevealedQuads(graphIriToBgpTriple, bindings, whereWithoutBgp, vars, df, engine);
+        const docs = await getRevealedQuads(
+          graphIriToBgpTriple,
+          graphPatterns,
+          bindings,
+          whereWithoutBgp,
+          vars,
+          df,
+          engine);
         const creds = docs; // TBD: add associated proofs
         return creds;
       }));

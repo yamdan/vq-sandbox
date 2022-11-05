@@ -9,7 +9,16 @@ const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
 
 type IdentifyCredsResultType = {
   bindings: RDF.Bindings,
-  graphIriToBgpTriple: Map<string, sparqljs.Triple[]>,
+  graphIriToBgpTriple: Map<string, TripleForZK[]>,
+};
+
+export type SubjectForZK = sparqljs.IriTerm | sparqljs.VariableTerm;
+export type PredicateForZK = sparqljs.IriTerm | sparqljs.VariableTerm;
+export type ObjectForZK = sparqljs.IriTerm | sparqljs.LiteralTerm | sparqljs.VariableTerm;
+export interface TripleForZK {
+  subject: SubjectForZK,
+  predicate: PredicateForZK,
+  object: ObjectForZK,
 };
 
 export const extractVars = (query: string) => {
@@ -26,57 +35,82 @@ export const extractVars = (query: string) => {
 }
 
 // parse the original SELECT query to get Basic Graph Pattern (BGP)
-export const parseQuery = (query: string) => {
+type ParseQueryResult = {
+  parsedQuery: sparqljs.SelectQuery;
+  bgpTriples: TripleForZK[];
+  whereWithoutBgp: sparqljs.Pattern[] | undefined;
+  gVarToBgpTriple: Record<string, TripleForZK>;
+} | {
+  error: string;
+};
+
+export const parseQuery = (query: string): ParseQueryResult => {
   const parser = new sparqljs.Parser();
   let parsedQuery;
   try {
     parsedQuery = parser.parse(query);
-    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
-      return undefined;
+    if ((parsedQuery.type !== 'query'
+      || parsedQuery.queryType !== 'SELECT')) {
+      return { error: 'SELECT query form must be used' };
     }
   } catch (error) {
-    return undefined;
+    return { error: 'malformed query' };
   }
 
-  const bgpPattern = parsedQuery.where?.filter((p) => p.type === 'bgp')[0] as sparqljs.BgpPattern;
+  // validate zkSPARQL query
+  const bgpPatterns = parsedQuery.where?.filter((p) => p.type === 'bgp');
+  if (bgpPatterns?.length !== 1) {
+    return { error: 'WHERE clause must consist of only one basic graph pattern' }
+  }
+  const bgpPattern = bgpPatterns[0] as sparqljs.BgpPattern;
   const bgpTriples = bgpPattern.triples;
+  if (!isTriplesWithoutPropertyPath(bgpTriples)) {
+    return { error: 'WHERE clause must consist of only one basic graph pattern' };
+  };
+
   const whereWithoutBgp = parsedQuery.where?.filter((p) => p.type !== 'bgp');
-  const gVarToBgpTriple: Record<string, sparqljs.Triple> = Object.assign({}, ...bgpTriples.map((triple, i) => ({
+  const gVarToBgpTriple: Record<string, TripleForZK> = Object.assign({}, ...bgpTriples.map((triple, i) => ({
     [`${GRAPH_VAR_PREFIX}${i}`]: triple
   })));
 
   return { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple };
 }
 
+export const isTripleWithoutPropertyPath =
+  (triple: sparqljs.Triple):
+    triple is TripleForZK =>
+    'type' in triple.predicate && triple.predicate.type === 'path' ? false : true;
+
+export const isTriplesWithoutPropertyPath =
+  (triples: sparqljs.Triple[]):
+    triples is TripleForZK[] =>
+    triples.map(isTripleWithoutPropertyPath).every(Boolean);
+
+export const genGraphPatterns = (
+  bgpTriples: sparqljs.Triple[],
+  df: DataFactory<RDF.Quad>
+): sparqljs.GraphPattern[] =>
+  bgpTriples.map((triple, i) => (
+    {
+      type: 'graph',
+      patterns: [{
+        type: 'bgp',
+        triples: [triple]
+      }],
+      name: df.variable(`${GRAPH_VAR_PREFIX}${i}`),
+    }
+  ));
+
 // identify credentials related to the given query
 export const getExtendedBindings = async (
   parsedQuery: sparqljs.SelectQuery,
-  bgpTriples: sparqljs.Triple[],
+  graphPatterns: sparqljs.GraphPattern[],
   df: DataFactory<RDF.Quad>,
   engine: Engine
 ) => {
-  // create graph patterns based on BGPs 
-  const graphPatterns: sparqljs.GraphPattern[] = bgpTriples.map((triple, i) => {
-    const patterns: sparqljs.BgpPattern[] = [
-      {
-        type: 'bgp',
-        triples: [triple]
-      }
-    ];
-    const name = df.variable(`${GRAPH_VAR_PREFIX}${i}`);
-    return {
-      type: 'graph',
-      patterns,
-      name
-    };
-  });
-
   // generate a new SELECT query to identify named graphs
   parsedQuery.distinct = true;
-  if (!isWildcard(parsedQuery.variables)) {
-    parsedQuery.variables = parsedQuery.variables.concat([...Array(graphPatterns.length)].map((_, i) => df.variable(`${GRAPH_VAR_PREFIX}${i}`)));
-  }
-  //parsedQuery.where = parsedQuery.where?.concat(graphPatterns);
+  parsedQuery.variables = [new sparqljs.Wildcard()];
   parsedQuery.where = parsedQuery.where?.filter((p) => p.type !== 'bgp').concat(graphPatterns);
 
   const generator = new sparqljs.Generator();
@@ -91,49 +125,47 @@ export const getExtendedBindings = async (
 
 export const identifyCreds = (
   bindings: RDF.Bindings,
-  gVarToBgpTriple: Record<string, sparqljs.Triple>,
+  gVarToBgpTriple: Record<string, TripleForZK>,
 ): IdentifyCredsResultType => {
-  const graphIriAndGraphVars = [...bindings].filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX)).map(([gVar, gIri]) => [gIri.value, gVar.value]);
-  const graphIriAndBgpTriples: [string, sparqljs.Triple][] = graphIriAndGraphVars.map(([gIri, gVar]) => [gIri, gVarToBgpTriple[gVar]]);
+  const graphIriAndGraphVars = [...bindings]
+    .filter((b) => b[0].value.startsWith(GRAPH_VAR_PREFIX))
+    .map(([gVar, gIri]) => [gIri.value, gVar.value]);
+  const graphIriAndBgpTriples: [string, TripleForZK][] = graphIriAndGraphVars
+    .map(([gIri, gVar]) => [gIri, gVarToBgpTriple[gVar]]);
   const graphIriToBgpTriple = entriesToMap(graphIriAndBgpTriples);
   return ({ bindings, graphIriToBgpTriple });
 };
 
 export const getRevealedQuads = async (
-  graphIriToBgpTriple: Map<string, sparqljs.Triple[]>,
+  graphIriToBgpTriple: Map<string, TripleForZK[]>,
+  graphPatterns: sparqljs.Pattern[],
   bindings: RDF.Bindings,
   whereWithoutBgp: sparqljs.Pattern[] | undefined,
   vars: sparqljs.Variable[] | [sparqljs.Wildcard],
   df: DataFactory<RDF.Quad>,
   engine: Engine
 ) => {
-  const graphPatterns: sparqljs.Pattern[] = [...graphIriToBgpTriple.entries()].map(([credGraphIri, bgpTriples]) => {
-    const bgpPattern: sparqljs.BgpPattern =
-    {
-      type: 'bgp',
-      triples: bgpTriples
-    };
-    const graphPattern: sparqljs.GraphPattern = {
-      type: 'graph',
-      patterns: [bgpPattern],
-      name: df.namedNode(credGraphIri)
-    };
-    return graphPattern;
-  });
-  const where = whereWithoutBgp ? graphPatterns.concat(whereWithoutBgp) : graphPatterns;
-
   const constructQueryObj: sparqljs.ConstructQuery = {
     queryType: 'CONSTRUCT',
     type: 'query',
     prefixes: {},
   };
-  constructQueryObj.where = where;
   const anonymizedQueryObj: sparqljs.ConstructQuery = {
     queryType: 'CONSTRUCT',
     type: 'query',
     prefixes: {},
   };
-  anonymizedQueryObj.where = where;
+  constructQueryObj.where = anonymizedQueryObj.where = graphPatterns.concat(whereWithoutBgp ?? []);
+  const values: sparqljs.ValuePatternRow = {};
+  for (const [v, t] of bindings) {
+    if (t.termType !== 'Variable'
+      && t.termType !== 'Quad'
+      && t.termType !== 'DefaultGraph'
+      && t.termType !== 'BlankNode') {
+      values[`?${v.value}`] = t;
+    }
+  }
+  constructQueryObj.values = anonymizedQueryObj.values = [values];
 
   const result = new Map<string, [RDF.Quad[], RDF.Quad[]]>();
   for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
@@ -143,18 +175,71 @@ export const getRevealedQuads = async (
     constructQueryObj.template = bgpTriples;
     const constructQuery = generator.stringify(constructQueryObj);
     const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
-    const quads = deduplicateQuads(await streamToArray(quadsStream));
+    const revealedQuads = deduplicateQuads(await streamToArray(quadsStream));
 
     // CONSTRUCT with anonymized IRIs
-    anonymizedQueryObj.template = bgpTriples;  // TBD
+    if (isWildcard(vars)) {
+      anonymizedQueryObj.template = bgpTriples;
+    } else {
+      anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df);
+    }
     const anonymizedQuery = generator.stringify(anonymizedQueryObj);
     const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
     const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
 
-    result.set(credGraphIri, [quads, anonymizedQuads]);
+    result.set(credGraphIri, [revealedQuads, anonymizedQuads]);
   }
   return result;
 };
+
+const anonymizeBgpTriples = (
+  bgpTriples: TripleForZK[],
+  vars: sparqljs.Variable[],
+  bindings: RDF.Bindings,
+  df: DataFactory<RDF.Quad>,
+): TripleForZK[] => bgpTriples.map(
+  (triple): TripleForZK => {
+    const varNames = vars.map((v) => 
+      'expression' in v ? v.variable.value : v.value);
+
+    const _anonymize = (term: SubjectForZK | PredicateForZK) =>
+      term.termType === 'Variable' && !varNames.includes(term.value) ?
+        df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/iri#${uuidv4()}`) as sparqljs.IriTerm :
+        df.fromTerm(term);
+    const subject = _anonymize(triple.subject);
+    const predicate = _anonymize(triple.predicate);
+
+    const _anonymizeObj = (term: ObjectForZK) => {
+      if (term.termType === 'Variable' && !varNames.includes(term.value)) {
+        const val = bindings.get(term);
+        if (val == undefined) {
+          return df.fromTerm(term);  // TBD
+        } else {
+          if (val.termType === 'NamedNode') {
+            return df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/iri#${uuidv4()}`) as sparqljs.IriTerm;
+          } else if (val.termType === 'BlankNode') {
+            return df.namedNode(`https://zkp-ld.org/.well-known/genid/anonymous/bnid#${uuidv4()}`) as sparqljs.IriTerm;
+          } else if (val.termType === 'Literal') {
+            if (val.language !== '') {
+              return df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${uuidv4()}`, val.language) as sparqljs.LiteralTerm;
+            } else {
+              return df.literal(`https://zkp-ld.org/.well-known/genid/anonymous/literal#${uuidv4()}`, val.datatype) as sparqljs.LiteralTerm;
+            }
+          } else {
+            return df.fromTerm(term);  // TBD
+          }
+        }
+      } else {
+        return df.fromTerm(term);
+      }
+    }
+    const object = _anonymizeObj(triple.object);
+
+    return {
+      subject, predicate, object
+    };
+  }
+);
 
 export const deduplicateQuads = (quads: RDF.Quad[]) =>
   quads.filter((quad1, index, self) =>
