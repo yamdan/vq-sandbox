@@ -5,6 +5,8 @@ import sparqljs from 'sparqljs';
 import { nanoid } from 'nanoid';
 
 // Constants
+const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
+const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
 const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
 const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnode#';
@@ -153,6 +155,18 @@ export const identifyCreds = (
   return ({ bindings, graphIriToBgpTriple });
 };
 
+export interface RevealedQuads {
+  revealedQuads: RDF.Quad[];
+  anonymizedQuads: RDF.Quad[];
+};
+
+export interface RevealedCreds {
+  revealedQuads: RDF.Quad[];
+  anonymizedQuads: RDF.Quad[];
+  wholeQuads: RDF.Quad[];
+  proofQuadsArray: RDF.Quad[][];
+};
+
 export const getRevealedQuads = async (
   graphIriToBgpTriple: Map<string, TripleForZK[]>,
   graphPatterns: sparqljs.Pattern[],
@@ -185,7 +199,7 @@ export const getRevealedQuads = async (
   }
   constructQueryObj.values = anonymizedQueryObj.values = [values];
 
-  const result = new Map<string, [RDF.Quad[], RDF.Quad[]]>();
+  const result = new Map<string, RevealedQuads>();
   for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
     const generator = new sparqljs.Generator();
 
@@ -205,7 +219,7 @@ export const getRevealedQuads = async (
     const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
     const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
 
-    result.set(credGraphIri, [revealedQuads, anonymizedQuads]);
+    result.set(credGraphIri, { revealedQuads, anonymizedQuads });
   }
   return result;
 };
@@ -223,8 +237,10 @@ export class Anonymizer {
     this.df = df;
   }
 
-  private _genKey = (varName: string, val: AnonymizableTerm) => 
-    `${varName}:${val.termType}:${val.value}`;
+  private _genKey = (varName: string, val: AnonymizableTerm) =>
+    val.termType === 'Literal' ?
+      `${varName}:${val.termType}:${val.value}:${nanoid(NANOID_LEN)}` :
+      `${varName}:${val.termType}:${val.value}`;
 
   anonymize = (varName: string, val: AnonymizableNonLiteralTerm) => {
     const key = this._genKey(varName, val);
@@ -322,6 +338,23 @@ const anonymizeBgpTriples = (
     };
   }
 );
+
+export const getProofsId = async (
+  graphIri: string,
+  engine: Engine
+) => {
+  const query = `
+  SELECT ?proof
+  WHERE {
+    GRAPH <${graphIri}> {
+      ?c a <${VC_TYPE}> ;
+        <${PROOF}> ?proof .
+    }
+  }`;
+  const bindingsStream = await engine.queryBindings(query);  // TBD: try-catch
+  const bindingsArray = await streamToArray(bindingsStream);
+  return bindingsArray.map((bindings) => bindings.get('proof'));
+};
 
 export const deduplicateQuads = (quads: RDF.Quad[]) =>
   quads.filter((quad1, index, self) =>

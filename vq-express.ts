@@ -6,7 +6,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
 import sparqljs from 'sparqljs';
-import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getProofsId, getRevealedQuads, identifyCreds, isWildcard, parseQuery, RevealedCreds, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -15,8 +15,6 @@ import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json'
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
 import schemaorg from './context/schemaorg.json' assert { type: 'json' };
-
-const PROOF = 'https://w3id.org/security#proof';
 
 const URL_TO_CONTEXTS = new Map([
   ['https://www.w3.org/2018/credentials/v1', vcv1],
@@ -157,19 +155,44 @@ app.get('/vsparql/', async (req, res, next) => {
         df,
         engine,
         anonymizer)));
-  console.dir(anonymizer, { depth: 8 });
 
-  // TBD: add credential metadata
-  const revealedCredsArray = revealedQuadsArray;  // TBD
-
-  // TBD: get associated proofs
+  // get credential metadata and associated proofs
+  const revealedCredsArray = await Promise.all(
+    revealedQuadsArray.map(
+      async (revealedQuads) => {
+        const revealedCreds = new Map<string, RevealedCreds>();
+        for (const [graphIri, quads] of revealedQuads) {
+          const vc = await store.get({
+            graph: df.namedNode(graphIri)
+          });
+          const proofs = await Promise.all(
+            (await getProofsId(graphIri, engine)).flatMap(
+              async (proofId) => {
+                if (proofId == undefined) {
+                  return [];
+                }
+                const proof = await store.get({
+                  graph: df.namedNode(proofId.value)
+                });
+                return proof.items;
+              }));
+          revealedCreds.set(graphIri, {
+            revealedQuads: quads.revealedQuads,
+            anonymizedQuads: quads.anonymizedQuads,
+            wholeQuads: vc.items,
+            proofQuadsArray: proofs
+          });
+        }
+        return revealedCreds;
+      }));
+  console.dir(revealedCredsArray, { depth: 6 });
 
   // serialize credentials
   const credJsonsArray: jsonld.NodeObject[][] = [];
   for (const creds of revealedCredsArray) {
     const credJsons: jsonld.NodeObject[] = [];
-    for (const [_credGraphIri, [_revealedCred, anonymizedCred]] of creds) {
-      const credJson = await jsonld.fromRDF(anonymizedCred);
+    for (const [_credGraphIri, { anonymizedQuads }] of creds) {
+      const credJson = await jsonld.fromRDF(anonymizedQuads);
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
       credJsons.push(credJsonCompact);
     }
