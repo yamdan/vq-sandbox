@@ -123,26 +123,20 @@ app.get('/vsparql/', async (req, res, next) => {
     // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
     const graphPatterns = genGraphPatterns(bgpTriples, df);
     const bindingsArray = await getExtendedBindings(parsedQuery, graphPatterns, df, engine);
-    // get revealed credentials
+    // get revealed and anonymized credentials
     const anonymizer = new Anonymizer(df);
-    const revealedCredsArray = await Promise.all(bindingsArray
+    const revealedQuadsArray = await Promise.all(bindingsArray
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
-        .map(async ({ bindings, graphIriToBgpTriple }) => {
-        // get revealed documents (without proofs)
-        const docs = await getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer);
-        const creds = docs; // TBD: add associated proofs
-        return creds;
-    }));
+        .map(async ({ bindings, graphIriToBgpTriple }) => await getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer)));
     console.dir(anonymizer, { depth: 8 });
-    // - for revealedCreds in revealedCredsArray:
-    //   - add credential metadata
-    //   - hide unspecified variables
-    //   - get associated proofs
+    // TBD: add credential metadata
+    const revealedCredsArray = revealedQuadsArray; // TBD
+    // TBD: get associated proofs
     // serialize credentials
     const credJsonsArray = [];
     for (const creds of revealedCredsArray) {
         const credJsons = [];
-        for (const [_credGraphIri, [_cred, anonymizedCred]] of creds) {
+        for (const [_credGraphIri, [_revealedCred, anonymizedCred]] of creds) {
             const credJson = await jsonld.fromRDF(anonymizedCred);
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
             credJsons.push(credJsonCompact);
