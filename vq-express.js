@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getProofsId, getRevealedQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -124,34 +124,11 @@ app.get('/vsparql/', async (req, res, next) => {
     const bindingsArray = await getExtendedBindings(parsedQuery, graphPatterns, df, engine);
     // get revealed and anonymized credentials
     const anonymizer = new Anonymizer(df);
-    const revealedQuadsArray = await Promise.all(bindingsArray
+    const revealedCredsArray = await Promise.all(bindingsArray
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
-        .map(async ({ bindings, graphIriToBgpTriple }) => await getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer)));
+        .map(({ bindings, graphIriToBgpTriple }) => getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer))
+        .map(async (revealedQuads) => getWholeQuads(await revealedQuads, store, df, engine)));
     // get credential metadata and associated proofs
-    const revealedCredsArray = await Promise.all(revealedQuadsArray.map(async (revealedQuads) => {
-        const revealedCreds = new Map();
-        for (const [graphIri, quads] of revealedQuads) {
-            const vc = await store.get({
-                graph: df.namedNode(graphIri)
-            });
-            const proofs = await Promise.all((await getProofsId(graphIri, engine)).flatMap(async (proofId) => {
-                if (proofId == undefined) {
-                    return [];
-                }
-                const proof = await store.get({
-                    graph: df.namedNode(proofId.value)
-                });
-                return proof.items;
-            }));
-            revealedCreds.set(graphIri, {
-                revealedQuads: quads.revealedQuads,
-                anonymizedQuads: quads.anonymizedQuads,
-                wholeQuads: vc.items,
-                proofQuadsArray: proofs
-            });
-        }
-        return revealedCreds;
-    }));
     console.dir(revealedCredsArray, { depth: 6 });
     // serialize credentials
     const credJsonsArray = [];

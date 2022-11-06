@@ -3,13 +3,14 @@ import { Engine } from 'quadstore-comunica';
 import * as RDF from '@rdfjs/types';
 import sparqljs from 'sparqljs';
 import { nanoid } from 'nanoid';
+import { Quadstore } from 'quadstore';
 
 // Constants
 const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
 const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
 const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
-const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnode#';
+const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnid#';
 const ANONL_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/literal#';
 const NANOID_LEN = 6;
 
@@ -223,6 +224,38 @@ export const getRevealedQuads = async (
   }
   return result;
 };
+
+export const getWholeQuads = async (
+  revealedQuads: Map<string, RevealedQuads>,
+  store: Quadstore,
+  df: DataFactory<RDF.Quad>,
+  engine: Engine,
+) => {
+  const revealedCreds = new Map<string, RevealedCreds>();
+  for (const [graphIri, quads] of revealedQuads) {
+    const vc = await store.get({
+      graph: df.namedNode(graphIri)
+    });
+    const proofs = await Promise.all(
+      (await getProofsId(graphIri, engine)).flatMap(
+        async (proofId) => {
+          if (proofId == undefined) {
+            return [];
+          }
+          const proof = await store.get({
+            graph: df.namedNode(proofId.value)
+          });
+          return proof.items;
+        }));
+    revealedCreds.set(graphIri, {
+      revealedQuads: quads.revealedQuads,
+      anonymizedQuads: quads.anonymizedQuads,
+      wholeQuads: vc.items,
+      proofQuadsArray: proofs
+    });
+  }
+  return revealedCreds;
+}
 
 export class Anonymizer {
   varToAnon: Map<string, sparqljs.IriTerm>;
