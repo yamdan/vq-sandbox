@@ -138,14 +138,8 @@ app.get('/vsparql/', async (req, res, next) => {
     for (const creds of revealedCredsArray) {
         const credJsons = [];
         for (const [_credGraphIri, { anonymizedCred }] of creds) {
-            // console.log('[anonymizedCred]\n');
-            // console.dir(anonymizedCred);
             const anonymizedCredWithBnodePrefix = anonymizedCred.map((quad) => addBnodePrefix(quad));
-            // console.log('[anonymizedCredWithBnodePrefix]\n');
-            // console.dir(anonymizedCredWithBnodePrefix);
             const credJson = await jsonld.fromRDF(anonymizedCredWithBnodePrefix);
-            // console.log('[credJson]\n');
-            // console.dir(credJson, {depth: 7});
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
             const credJsonFramed = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
             credJsons.push(credJsonFramed);

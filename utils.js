@@ -1,6 +1,6 @@
 import sparqljs from 'sparqljs';
 import { nanoid } from 'nanoid';
-// ** constants **
+// ** constants ** //
 const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
 const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
@@ -10,11 +10,6 @@ const ANONL_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/literal#';
 const NANOID_LEN = 6;
 const BNODE_PREFIX = '_:';
 ;
-export const isAnonymizableNonLiteralTerm = (t) => (t.termType === 'NamedNode'
-    || t.termType === 'BlankNode');
-export const isAnonymizableTerm = (t) => (t.termType === 'NamedNode'
-    || t.termType === 'BlankNode'
-    || t.termType === 'Literal');
 export const isZkSubject = (t) => (t.termType === 'NamedNode'
     || t.termType === 'BlankNode');
 export const isZkPredicate = (t) => t.termType === 'NamedNode';
@@ -23,7 +18,7 @@ export const isZkObject = (t) => (t.termType === 'NamedNode'
     || t.termType === 'Literal');
 ;
 ;
-// ** functions **
+// ** functions ** //
 export const isVariableTerm = (v) => !('expression' in v);
 export const isVariableTerms = (vs) => vs.every((v) => isVariableTerm(v));
 export const extractVars = (query) => {
@@ -161,11 +156,11 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
         const revealedCred = quads.revealedQuads.concat(metadata);
         // get anonymized credential by addding metadata to anonymized quads
         const anonymizedMetadata = metadata.map((quad) => {
-            const subject = isAnonymizableNonLiteralTerm(quad.subject) ?
+            const subject = isZkSubject(quad.subject) ?
                 anonymizer.get(quad.subject) : quad.subject;
-            const predicate = isAnonymizableNonLiteralTerm(quad.predicate) ?
+            const predicate = isZkPredicate(quad.predicate) ?
                 anonymizer.get(quad.predicate) : quad.predicate;
-            const object = isAnonymizableTerm(quad.object) ?
+            const object = isZkObject(quad.object) ?
                 anonymizer.getObject(quad.object) : quad.object;
             return df.quad(subject != undefined ? subject : quad.subject, predicate != undefined ? predicate : quad.predicate, object != undefined ? object : quad.object, df.defaultGraph());
         });
@@ -180,7 +175,6 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
             proofQuadsArray: proofs
         });
     }
-    console.dir(revealedCreds, { depth: 6 });
     return revealedCreds;
 };
 export class Anonymizer {
@@ -265,7 +259,7 @@ const anonymizeQuad = (bgpTriples, vars, bindings, df, anonymizer) => bgpTriples
     }
     else {
         const val = bindings.get(triple.subject);
-        if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
+        if (val != undefined && isZkSubject(val)) {
             subject = anonymizer.anonymize(val);
         }
     }
@@ -278,7 +272,7 @@ const anonymizeQuad = (bgpTriples, vars, bindings, df, anonymizer) => bgpTriples
     }
     else {
         const val = bindings.get(triple.predicate);
-        if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
+        if (val != undefined && isZkPredicate(val)) {
             predicate = anonymizer.anonymize(val);
         }
     }
@@ -291,7 +285,7 @@ const anonymizeQuad = (bgpTriples, vars, bindings, df, anonymizer) => bgpTriples
     }
     else {
         const val = bindings.get(triple.object);
-        if (val != undefined && isAnonymizableTerm(val)) {
+        if (val != undefined && isZkObject(val)) {
             object = anonymizer.anonymizeObject(val);
         }
     }
@@ -448,86 +442,3 @@ export const addBnodePrefix = (quad) => {
     }
     return quad;
 };
-export const getRevealedQuadsByConstruct = async (graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer) => {
-    const constructQueryObj = {
-        queryType: 'CONSTRUCT',
-        type: 'query',
-        prefixes: {},
-    };
-    const anonymizedQueryObj = {
-        queryType: 'CONSTRUCT',
-        type: 'query',
-        prefixes: {},
-    };
-    constructQueryObj.where = anonymizedQueryObj.where = graphPatterns.concat(whereWithoutBgp !== null && whereWithoutBgp !== void 0 ? whereWithoutBgp : []);
-    const values = {};
-    for (const [v, t] of bindings) {
-        if (t.termType !== 'Variable'
-            && t.termType !== 'Quad'
-            && t.termType !== 'DefaultGraph'
-            && t.termType !== 'BlankNode') {
-            values[`?${v.value}`] = t;
-        }
-    }
-    constructQueryObj.values = anonymizedQueryObj.values = [values];
-    const result = new Map();
-    for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
-        const generator = new sparqljs.Generator();
-        // CONSTRUCT
-        constructQueryObj.template = bgpTriples;
-        const constructQuery = generator.stringify(constructQueryObj);
-        const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
-        const revealedQuads = deduplicateQuads(await streamToArray(quadsStream));
-        // CONSTRUCT with anonymized IRIs
-        if (isWildcard(vars)) {
-            anonymizedQueryObj.template = bgpTriples;
-        }
-        else {
-            anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df, anonymizer);
-        }
-        const anonymizedQuery = generator.stringify(anonymizedQueryObj);
-        const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
-        const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
-        result.set(credGraphIri, { revealedQuads, anonymizedQuads });
-    }
-    return result;
-};
-const anonymizeBgpTriples = (bgpTriples, vars, bindings, df, anonymizer) => bgpTriples.map((triple) => {
-    const varNames = vars.map((v) => 'expression' in v ? v.variable.value : v.value);
-    const _anonymize = (term) => {
-        if (term.termType === 'Variable' && !varNames.includes(term.value)) {
-            const val = bindings.get(term);
-            if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
-                //return anonymizer.anonymize(val, term.value);
-                return anonymizer.anonymize(val);
-            }
-            else {
-                return df.fromTerm(term); // TBD
-            }
-        }
-        else {
-            return df.fromTerm(term);
-        }
-    };
-    const subject = _anonymize(triple.subject);
-    const predicate = _anonymize(triple.predicate);
-    const _anonymizeObject = (term) => {
-        if (term.termType === 'Variable' && !varNames.includes(term.value)) {
-            const val = bindings.get(term);
-            if (val != undefined && isAnonymizableTerm(val)) {
-                //return anonymizer.anonymizeObject(val, term.value);
-                return anonymizer.anonymizeObject(val);
-            }
-            else {
-                return df.fromTerm(term); // TBD
-            }
-        }
-        else {
-            return df.fromTerm(term);
-        }
-    };
-    const object = _anonymizeObject(triple.object);
-    return {
-        subject, predicate, object
-    };
-});

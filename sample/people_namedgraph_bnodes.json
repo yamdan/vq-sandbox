@@ -45,9 +45,14 @@
       "expirationDate": "2022-07-01T00:00:00Z",
       "credentialSubject": {
         "type": "Person",
-        "givenName": "Jane",
-        "familyName": "Doe",
-        "birthDate": "1990-12-31",
+        "givenName": {
+          "@value": "ジョン",
+          "@language": "ja"
+        },
+        "familyName": {
+          "@value": "スミス",
+          "@language": "ja"
+        },
         "knows": {
           "id": "did:example:holder1"
         },
