@@ -14,6 +14,7 @@ const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
 const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnid#';
 const ANONL_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/literal#';
 const NANOID_LEN = 6;
+const BNODE_PREFIX = '_:';
 
 // ** types **
 
@@ -44,6 +45,22 @@ export const isAnonymizableTerm =
     || t.termType === 'BlankNode'
     || t.termType === 'Literal');
 
+type ZkSubject = sparqljs.IriTerm | sparqljs.BlankTerm;
+export const isZkSubject =
+  (t: RDF.Term): t is ZkSubject =>
+  (t.termType === 'NamedNode'
+    || t.termType === 'BlankNode');
+type ZkPredicate = sparqljs.IriTerm;
+export const isZkPredicate =
+  (t: RDF.Term): t is ZkPredicate =>
+    t.termType === 'NamedNode';
+type ZkObject = sparqljs.IriTerm | sparqljs.BlankTerm | sparqljs.LiteralTerm;
+export const isZkObject =
+  (t: RDF.Term): t is ZkObject =>
+  (t.termType === 'NamedNode'
+    || t.termType === 'BlankNode'
+    || t.termType === 'Literal');
+
 type ParseQueryResult = {
   parsedQuery: sparqljs.SelectQuery;
   bgpTriples: TripleForZK[];
@@ -69,18 +86,35 @@ export interface RevealedCreds {
 
 // ** functions **
 
-export const extractVars = (query: string) => {
-  const parser = new sparqljs.Parser();
-  try {
-    const parsedQuery = parser.parse(query);
-    if (!(parsedQuery.type === 'query' && parsedQuery.queryType === 'SELECT')) {
-      return undefined;
+export const isVariableTerm =
+  (v: sparqljs.Variable): v is sparqljs.VariableTerm =>
+    !('expression' in v);
+export const isVariableTerms =
+  (vs: sparqljs.Variable[]): vs is sparqljs.VariableTerm[] =>
+    vs.every((v) => isVariableTerm(v));
+
+export const extractVars =
+  (query: string):
+    sparqljs.VariableTerm[] |
+    [sparqljs.Wildcard] |
+    { error: string } => {
+    const parser = new sparqljs.Parser();
+    try {
+      const parsedQuery = parser.parse(query);
+      if (!(parsedQuery.type === 'query'
+        && parsedQuery.queryType === 'SELECT')) {
+        return { error: 'query must be SELECT form' };
+      }
+      if (isWildcard(parsedQuery.variables)
+        || (isVariableTerms(parsedQuery.variables))) {
+        return parsedQuery.variables;
+      } else {
+        return { error: 'query must not contain term expressions' }
+      }
+    } catch (error) {
+      return { error: 'malformed query' };
     }
-    return parsedQuery.variables;
-  } catch (error) {
-    return undefined;
   }
-}
 
 // parse the original SELECT query to get Basic Graph Pattern (BGP)
 export const parseQuery = (query: string): ParseQueryResult => {
@@ -104,7 +138,7 @@ export const parseQuery = (query: string): ParseQueryResult => {
   const bgpPattern = bgpPatterns[0] as sparqljs.BgpPattern;
   const bgpTriples = bgpPattern.triples;
   if (!isTriplesWithoutPropertyPath(bgpTriples)) {
-    return { error: 'WHERE clause must consist of only one basic graph pattern' };
+    return { error: 'property paths are not supported' };
   };
 
   const whereWithoutBgp = parsedQuery.where?.filter((p) => p.type !== 'bgp');
@@ -177,56 +211,32 @@ export const identifyCreds = (
 
 export const getRevealedQuads = async (
   graphIriToBgpTriple: Map<string, TripleForZK[]>,
-  graphPatterns: sparqljs.Pattern[],
   bindings: RDF.Bindings,
-  whereWithoutBgp: sparqljs.Pattern[] | undefined,
-  vars: sparqljs.Variable[] | [sparqljs.Wildcard],
+  vars: sparqljs.VariableTerm[] | [sparqljs.Wildcard],
   df: DataFactory<RDF.Quad>,
-  engine: Engine,
   anonymizer: Anonymizer,
 ) => {
-  const constructQueryObj: sparqljs.ConstructQuery = {
-    queryType: 'CONSTRUCT',
-    type: 'query',
-    prefixes: {},
-  };
-  const anonymizedQueryObj: sparqljs.ConstructQuery = {
-    queryType: 'CONSTRUCT',
-    type: 'query',
-    prefixes: {},
-  };
-  constructQueryObj.where = anonymizedQueryObj.where = graphPatterns.concat(whereWithoutBgp ?? []);
-  const values: sparqljs.ValuePatternRow = {};
-  for (const [v, t] of bindings) {
-    if (t.termType !== 'Variable'
-      && t.termType !== 'Quad'
-      && t.termType !== 'DefaultGraph'
-      && t.termType !== 'BlankNode') {
-      values[`?${v.value}`] = t;
-    }
-  }
-  constructQueryObj.values = anonymizedQueryObj.values = [values];
-
   const result = new Map<string, RevealedQuads>();
   for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
-    const generator = new sparqljs.Generator();
-
-    // CONSTRUCT
-    constructQueryObj.template = bgpTriples;
-    const constructQuery = generator.stringify(constructQueryObj);
-    const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
-    const revealedQuads = deduplicateQuads(await streamToArray(quadsStream));
-
-    // CONSTRUCT with anonymized IRIs
-    if (isWildcard(vars)) {
-      anonymizedQueryObj.template = bgpTriples;
-    } else {
-      anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df, anonymizer);
-    }
-    const anonymizedQuery = generator.stringify(anonymizedQueryObj);
-    const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
-    const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
-
+    const revealedQuads = bgpTriples.flatMap((triple) => {
+      const subject = triple.subject.termType === 'Variable'
+        ? bindings.get(triple.subject) : triple.subject;
+      const predicate = triple.predicate.termType === 'Variable'
+        ? bindings.get(triple.predicate) : triple.predicate;
+      const object = triple.object.termType === 'Variable'
+        ? bindings.get(triple.object) : triple.object;
+      const graph = df.defaultGraph()
+      if (subject != undefined && isZkSubject(subject)
+        && predicate != undefined && isZkPredicate(predicate)
+        && object != undefined && isZkObject(object)) {
+        return [df.quad(subject, predicate, object, graph)];
+      } else {
+        return []
+      }
+    });
+    const anonymizedQuads = isWildcard(vars)
+      ? revealedQuads.map((quad) => df.fromQuad(quad)) // deep copy
+      : anonymizeQuad(bgpTriples, vars, bindings, df, anonymizer);
     result.set(credGraphIri, { revealedQuads, anonymizedQuads });
   }
   return result;
@@ -290,6 +300,7 @@ export const getWholeQuads = async (
       proofQuadsArray: proofs
     });
   }
+  console.dir(revealedCreds, { depth: 6 });
   return revealedCreds;
 }
 
@@ -380,51 +391,59 @@ export class Anonymizer {
   };
 }
 
-const anonymizeBgpTriples = (
+const anonymizeQuad = (
   bgpTriples: TripleForZK[],
-  vars: sparqljs.Variable[],
+  vars: sparqljs.VariableTerm[],
   bindings: RDF.Bindings,
   df: DataFactory<RDF.Quad>,
   anonymizer: Anonymizer,
-): TripleForZK[] => bgpTriples.map(
-  (triple): TripleForZK => {
-    const varNames = vars.map((v) =>
-      'expression' in v ? v.variable.value : v.value);
-
-    const _anonymize = (term: SubjectForZK | PredicateForZK) => {
-      if (term.termType === 'Variable' && !varNames.includes(term.value)) {
-        const val = bindings.get(term);
-        if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
-          //return anonymizer.anonymize(val, term.value);
-          return anonymizer.anonymize(val);
-        } else {
-          return df.fromTerm(term);  // TBD
-        }
-      } else {
-        return df.fromTerm(term);
+) => bgpTriples.flatMap(
+  (triple) => {
+    let subject: RDF.Term | undefined;
+    if (triple.subject.termType !== 'Variable') {
+      subject = triple.subject;
+    } else if (vars.some((v) => v.value === triple.subject.value)) {
+      subject = bindings.get(triple.subject);
+    } else {
+      const val = bindings.get(triple.subject);
+      if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
+        subject = anonymizer.anonymize(val);
       }
     }
-    const subject = _anonymize(triple.subject);
-    const predicate = _anonymize(triple.predicate);
 
-    const _anonymizeObject = (term: ObjectForZK) => {
-      if (term.termType === 'Variable' && !varNames.includes(term.value)) {
-        const val = bindings.get(term);
-        if (val != undefined && isAnonymizableTerm(val)) {
-          //return anonymizer.anonymizeObject(val, term.value);
-          return anonymizer.anonymizeObject(val);
-        } else {
-          return df.fromTerm(term);  // TBD
-        }
-      } else {
-        return df.fromTerm(term);
+    let predicate: RDF.Term | undefined;
+    if (triple.predicate.termType !== 'Variable') {
+      predicate = triple.predicate;
+    } else if (vars.some((v) => v.value === triple.predicate.value)) {
+      predicate = bindings.get(triple.predicate);
+    } else {
+      const val = bindings.get(triple.predicate);
+      if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
+        predicate = anonymizer.anonymize(val);
       }
     }
-    const object = _anonymizeObject(triple.object);
 
-    return {
-      subject, predicate, object
-    };
+    let object: RDF.Term | undefined;
+    if (triple.object.termType !== 'Variable') {
+      object = triple.object;
+    } else if (vars.some((v) => v.value === triple.object.value)) {
+      object = bindings.get(triple.object);
+    } else {
+      const val = bindings.get(triple.object);
+      if (val != undefined && isAnonymizableTerm(val)) {
+        object = anonymizer.anonymizeObject(val);
+      }
+    }
+
+    const graph = df.defaultGraph();
+
+    if (subject != undefined && isZkSubject(subject)
+      && predicate != undefined && isZkPredicate(predicate)
+      && object != undefined && isZkObject(object)) {
+      return [df.quad(subject, predicate, object, graph)];
+    } else {
+      return []
+    }
   }
 );
 
@@ -579,3 +598,124 @@ export const genJsonResults = (jsonVars: string[], bindingsArray: RDF.Bindings[]
 
 export const isWildcard = (vars: sparqljs.Variable[] | [sparqljs.Wildcard]): vars is [sparqljs.Wildcard] =>
   vars.length === 1 && 'value' in vars[0] && vars[0].value === '*';
+
+export const addBnodePrefix = (quad: RDF.Quad) => {
+  if (quad.subject.termType === 'BlankNode'
+    && !quad.subject.value.startsWith(BNODE_PREFIX)) {
+    quad.subject.value = `${BNODE_PREFIX}${quad.subject.value}`;
+  }
+  if (quad.object.termType === 'BlankNode'
+    && !quad.object.value.startsWith(BNODE_PREFIX)) {
+    quad.object.value = `${BNODE_PREFIX}${quad.object.value}`;
+  }
+  if (quad.graph.termType === 'BlankNode'
+    && !quad.graph.value.startsWith(BNODE_PREFIX)) {
+    quad.graph.value = `${BNODE_PREFIX}${quad.graph.value}`;
+  }
+  return quad;
+}
+
+export const getRevealedQuadsByConstruct = async (
+  graphIriToBgpTriple: Map<string, TripleForZK[]>,
+  graphPatterns: sparqljs.Pattern[],
+  bindings: RDF.Bindings,
+  whereWithoutBgp: sparqljs.Pattern[] | undefined,
+  vars: sparqljs.Variable[] | [sparqljs.Wildcard],
+  df: DataFactory<RDF.Quad>,
+  engine: Engine,
+  anonymizer: Anonymizer,
+) => {
+  const constructQueryObj: sparqljs.ConstructQuery = {
+    queryType: 'CONSTRUCT',
+    type: 'query',
+    prefixes: {},
+  };
+  const anonymizedQueryObj: sparqljs.ConstructQuery = {
+    queryType: 'CONSTRUCT',
+    type: 'query',
+    prefixes: {},
+  };
+  constructQueryObj.where = anonymizedQueryObj.where = graphPatterns.concat(whereWithoutBgp ?? []);
+  const values: sparqljs.ValuePatternRow = {};
+  for (const [v, t] of bindings) {
+    if (t.termType !== 'Variable'
+      && t.termType !== 'Quad'
+      && t.termType !== 'DefaultGraph'
+      && t.termType !== 'BlankNode') {
+      values[`?${v.value}`] = t;
+    }
+  }
+  constructQueryObj.values = anonymizedQueryObj.values = [values];
+
+  const result = new Map<string, RevealedQuads>();
+  for (const [credGraphIri, bgpTriples] of graphIriToBgpTriple.entries()) {
+    const generator = new sparqljs.Generator();
+
+    // CONSTRUCT
+    constructQueryObj.template = bgpTriples;
+    const constructQuery = generator.stringify(constructQueryObj);
+    const quadsStream = await engine.queryQuads(constructQuery, { unionDefaultGraph: true });
+    const revealedQuads = deduplicateQuads(await streamToArray(quadsStream));
+
+    // CONSTRUCT with anonymized IRIs
+    if (isWildcard(vars)) {
+      anonymizedQueryObj.template = bgpTriples;
+    } else {
+      anonymizedQueryObj.template = anonymizeBgpTriples(bgpTriples, vars, bindings, df, anonymizer);
+    }
+    const anonymizedQuery = generator.stringify(anonymizedQueryObj);
+    const anonymizedQuadsStream = await engine.queryQuads(anonymizedQuery, { unionDefaultGraph: true });
+    const anonymizedQuads = deduplicateQuads(await streamToArray(anonymizedQuadsStream));
+
+    result.set(credGraphIri, { revealedQuads, anonymizedQuads });
+  }
+  return result;
+};
+
+const anonymizeBgpTriples = (
+  bgpTriples: TripleForZK[],
+  vars: sparqljs.Variable[],
+  bindings: RDF.Bindings,
+  df: DataFactory<RDF.Quad>,
+  anonymizer: Anonymizer,
+): TripleForZK[] => bgpTriples.map(
+  (triple): TripleForZK => {
+    const varNames = vars.map((v) =>
+      'expression' in v ? v.variable.value : v.value);
+
+    const _anonymize = (term: SubjectForZK | PredicateForZK) => {
+      if (term.termType === 'Variable' && !varNames.includes(term.value)) {
+        const val = bindings.get(term);
+        if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
+          //return anonymizer.anonymize(val, term.value);
+          return anonymizer.anonymize(val);
+        } else {
+          return df.fromTerm(term);  // TBD
+        }
+      } else {
+        return df.fromTerm(term);
+      }
+    }
+    const subject = _anonymize(triple.subject);
+    const predicate = _anonymize(triple.predicate);
+
+    const _anonymizeObject = (term: ObjectForZK) => {
+      if (term.termType === 'Variable' && !varNames.includes(term.value)) {
+        const val = bindings.get(term);
+        if (val != undefined && isAnonymizableTerm(val)) {
+          //return anonymizer.anonymizeObject(val, term.value);
+          return anonymizer.anonymizeObject(val);
+        } else {
+          return df.fromTerm(term);  // TBD
+        }
+      } else {
+        return df.fromTerm(term);
+      }
+    }
+    const object = _anonymizeObject(triple.object);
+
+    return {
+      subject, predicate, object
+    };
+  }
+);

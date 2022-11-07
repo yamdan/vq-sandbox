@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -61,8 +61,8 @@ const respondToSelectQuery = async (query: string, parsedQuery: RDF.QueryBinding
 
   // extract variables from SELECT query
   const vars = extractVars(query);
-  if (vars == undefined) {
-    throw new Error('SPARQL query must be SELECT form');
+  if ('error' in vars) {
+    throw new Error(vars.error);
   }
 
   // send response
@@ -71,8 +71,8 @@ const respondToSelectQuery = async (query: string, parsedQuery: RDF.QueryBinding
     // SELECT * WHERE {...}
     jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
   } else {
-    // SELECT ?s ?p ?o WHERE {...} / SELECT (?s AS ?sub) ?p ?o WHERE {...}
-    jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
+    // SELECT ?s ?p ?o WHERE {...}
+    jsonVars = vars.map((v) => v.value);
   }
   return { jsonVars, bindingsArray };
 };
@@ -80,7 +80,8 @@ const respondToSelectQuery = async (query: string, parsedQuery: RDF.QueryBinding
 const respondToConstructQuery = async (parsedQuery: RDF.QueryQuads<RDF.AllMetadataSupport>) => {
   const quadsStream = await parsedQuery.execute();
   const quadsArray = await streamToArray(quadsStream);
-  const quadsJsonld = await jsonld.fromRDF(quadsArray);
+  const quadsArrayWithBnodePrefix = quadsArray.map((quad) => addBnodePrefix(quad));
+  const quadsJsonld = await jsonld.fromRDF(quadsArrayWithBnodePrefix);
   const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader: customDocLoader });
   return quadsJsonldCompact;
 };
@@ -98,7 +99,7 @@ app.get('/sparql/', async (req, res, next) => {
   try {
     parsedQuery = await engine.query(query, { unionDefaultGraph: true });
   } catch (error) {
-    return next(new Error(`malformed SPARQL query: ${error}`));
+    return next(new Error(`malformed query: ${error}`));
   }
 
   // execute query
@@ -124,14 +125,14 @@ app.get('/vsparql/', async (req, res, next) => {
 
   // extract variables from SELECT query
   const vars = extractVars(query);
-  if (vars == undefined) {
-    return next(new Error('malformed SPARQL query'));
+  if ('error' in vars) {
+    return next(new Error(vars.error));
   }
 
   // parse SELECT query
   const parseResult = parseQuery(query);
   if ('error' in parseResult) {
-    return next(new Error('malformed SPARQL query')); // TBD
+    return next(new Error(parseResult.error)); // TBD
   }
   const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
 
@@ -151,12 +152,9 @@ app.get('/vsparql/', async (req, res, next) => {
       .map(({ bindings, graphIriToBgpTriple }) =>
         getRevealedQuads(
           graphIriToBgpTriple,
-          graphPatterns,
           bindings,
-          whereWithoutBgp,
           vars,
           df,
-          engine,
           anonymizer))
       .map(async (revealedQuads) =>
         getWholeQuads(
@@ -165,9 +163,6 @@ app.get('/vsparql/', async (req, res, next) => {
           df,
           engine,
           anonymizer)));
-
-  // get credential metadata and associated proofs
-  console.dir(anonymizer, { depth: 6 });
 
   // serialize credentials
   const VC_FRAME =
@@ -179,7 +174,14 @@ app.get('/vsparql/', async (req, res, next) => {
   for (const creds of revealedCredsArray) {
     const credJsons: jsonld.NodeObject[] = [];
     for (const [_credGraphIri, { anonymizedCred }] of creds) {
-      const credJson = await jsonld.fromRDF(anonymizedCred);
+      // console.log('[anonymizedCred]\n');
+      // console.dir(anonymizedCred);
+      const anonymizedCredWithBnodePrefix = anonymizedCred.map((quad) => addBnodePrefix(quad));
+      // console.log('[anonymizedCredWithBnodePrefix]\n');
+      // console.dir(anonymizedCredWithBnodePrefix);
+      const credJson = await jsonld.fromRDF(anonymizedCredWithBnodePrefix);
+      // console.log('[credJson]\n');
+      // console.dir(credJson, {depth: 7});
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
       const credJsonFramed = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
       credJsons.push(credJsonFramed);
@@ -198,8 +200,8 @@ app.get('/vsparql/', async (req, res, next) => {
     // SELECT * WHERE {...}
     jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
   } else {
-    // SELECT ?s ?p ?o WHERE {...} / SELECT (?s AS ?sub) ?p ?o WHERE {...}
-    jsonVars = vars.map((v) => 'value' in v ? v.value : v.variable.value);
+    // SELECT ?s ?p ?o WHERE {...}
+    jsonVars = vars.map((v) => v.value);
   }
   jsonVars.push('vp');
   res.send(genJsonResults(jsonVars, bindingsWithVPArray));
