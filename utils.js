@@ -1,6 +1,6 @@
 import sparqljs from 'sparqljs';
 import { nanoid } from 'nanoid';
-// Constants
+// ** constants **
 const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
 const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
@@ -14,6 +14,9 @@ export const isAnonymizableNonLiteralTerm = (t) => (t.termType === 'NamedNode'
 export const isAnonymizableTerm = (t) => (t.termType === 'NamedNode'
     || t.termType === 'BlankNode'
     || t.termType === 'Literal');
+;
+;
+// ** functions **
 export const extractVars = (query) => {
     const parser = new sparqljs.Parser();
     try {
@@ -27,6 +30,7 @@ export const extractVars = (query) => {
         return undefined;
     }
 };
+// parse the original SELECT query to get Basic Graph Pattern (BGP)
 export const parseQuery = (query) => {
     var _a, _b;
     const parser = new sparqljs.Parser();
@@ -91,8 +95,6 @@ export const identifyCreds = (bindings, gVarToBgpTriple) => {
     const graphIriToBgpTriple = entriesToMap(graphIriAndBgpTriples);
     return ({ bindings, graphIriToBgpTriple });
 };
-;
-;
 export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer) => {
     const constructQueryObj = {
         queryType: 'CONSTRUCT',
@@ -137,12 +139,15 @@ export const getRevealedQuads = async (graphIriToBgpTriple, graphPatterns, bindi
     }
     return result;
 };
-export const getWholeQuads = async (revealedQuads, store, df, engine) => {
+export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer) => {
+    var _a;
     const revealedCreds = new Map();
     for (const [graphIri, quads] of revealedQuads) {
+        // get whole creds
         const vc = await store.get({
             graph: df.namedNode(graphIri)
         });
+        // get associated proofs
         const proofs = await Promise.all((await getProofsId(graphIri, engine)).flatMap(async (proofId) => {
             if (proofId == undefined) {
                 return [];
@@ -152,10 +157,27 @@ export const getWholeQuads = async (revealedQuads, store, df, engine) => {
             });
             return proof.items;
         }));
+        // get revealed credential by addding metadata to revealed quads
+        const metadata = (_a = await getCredentialMetadata(graphIri, df, store, engine)) !== null && _a !== void 0 ? _a : [];
+        const revealedCred = quads.revealedQuads.concat(metadata);
+        // get anonymized credential by addding metadata to anonymized quads
+        const anonymizedMetadata = metadata.map((quad) => {
+            const subject = isAnonymizableNonLiteralTerm(quad.subject) ?
+                anonymizer.get(quad.subject) : quad.subject;
+            const predicate = isAnonymizableNonLiteralTerm(quad.predicate) ?
+                anonymizer.get(quad.predicate) : quad.predicate;
+            const object = isAnonymizableTerm(quad.object) ?
+                anonymizer.getObject(quad.object) : quad.object;
+            return df.quad(subject != undefined ? subject : quad.subject, predicate != undefined ? predicate : quad.predicate, object != undefined ? object : quad.object, df.defaultGraph());
+        });
+        const anonymizedCred = metadata == undefined ? quads.anonymizedQuads
+            : quads.anonymizedQuads.concat(anonymizedMetadata);
         revealedCreds.set(graphIri, {
             revealedQuads: quads.revealedQuads,
             anonymizedQuads: quads.anonymizedQuads,
             wholeQuads: vc.items,
+            revealedCred,
+            anonymizedCred,
             proofQuadsArray: proofs
         });
     }
@@ -163,11 +185,11 @@ export const getWholeQuads = async (revealedQuads, store, df, engine) => {
 };
 export class Anonymizer {
     constructor(df) {
-        this._genKey = (varName, val) => val.termType === 'Literal' ?
-            `${varName}:${val.termType}:${val.value}:${nanoid(NANOID_LEN)}` :
-            `${varName}:${val.termType}:${val.value}`;
-        this.anonymize = (varName, val) => {
-            const key = this._genKey(varName, val);
+        this._genKey = (val, varName) => val.termType === 'Literal' ?
+            `${varName !== null && varName !== void 0 ? varName : ''}:${val.termType}:${val.value}:${nanoid(NANOID_LEN)}` :
+            `${varName !== null && varName !== void 0 ? varName : ''}:${val.termType}:${val.value}`;
+        this.anonymize = (val, varName) => {
+            const key = this._genKey(val, varName);
             let anon;
             if (val.termType === 'NamedNode') {
                 const result = this.varToAnon.get(key);
@@ -187,11 +209,20 @@ export class Anonymizer {
             }
             return anon;
         };
-        this.anonymizeObject = (varName, val) => {
-            const key = this._genKey(varName, val);
+        this.get = (val) => {
+            const key = this._genKey(val);
+            if (val.termType === 'NamedNode') {
+                return this.varToAnon.get(key);
+            }
+            else {
+                return this.varToAnonBlank.get(key);
+            }
+        };
+        this.anonymizeObject = (val, varName) => {
+            const key = this._genKey(val, varName);
             let anon;
             if (val.termType === 'NamedNode' || val.termType === 'BlankNode') {
-                return this.anonymize(varName, val);
+                return this.anonymize(val, varName);
             }
             else {
                 const result = this.varToAnonLiteral.get(key);
@@ -209,6 +240,15 @@ export class Anonymizer {
             }
             return anon;
         };
+        this.getObject = (val) => {
+            const key = this._genKey(val);
+            if (val.termType === 'NamedNode' || val.termType === 'BlankNode') {
+                return this.get(val);
+            }
+            else {
+                return this.varToAnonLiteral.get(key);
+            }
+        };
         this.varToAnon = new Map();
         this.varToAnonBlank = new Map();
         this.varToAnonLiteral = new Map();
@@ -221,7 +261,8 @@ const anonymizeBgpTriples = (bgpTriples, vars, bindings, df, anonymizer) => bgpT
         if (term.termType === 'Variable' && !varNames.includes(term.value)) {
             const val = bindings.get(term);
             if (val != undefined && isAnonymizableNonLiteralTerm(val)) {
-                return anonymizer.anonymize(term.value, val);
+                //return anonymizer.anonymize(val, term.value);
+                return anonymizer.anonymize(val);
             }
             else {
                 return df.fromTerm(term); // TBD
@@ -237,7 +278,8 @@ const anonymizeBgpTriples = (bgpTriples, vars, bindings, df, anonymizer) => bgpT
         if (term.termType === 'Variable' && !varNames.includes(term.value)) {
             const val = bindings.get(term);
             if (val != undefined && isAnonymizableTerm(val)) {
-                return anonymizer.anonymizeObject(term.value, val);
+                //return anonymizer.anonymizeObject(val, term.value);
+                return anonymizer.anonymizeObject(val);
             }
             else {
                 return df.fromTerm(term); // TBD
@@ -252,12 +294,37 @@ const anonymizeBgpTriples = (bgpTriples, vars, bindings, df, anonymizer) => bgpT
         subject, predicate, object
     };
 });
+export const getCredentialMetadata = async (graphIri, df, store, engine) => {
+    const query = `
+  SELECT ?cred
+  WHERE {
+    GRAPH <${graphIri}> {
+      ?cred a <${VC_TYPE}> .
+    }
+  }`;
+    const bindingsStream = await engine.queryBindings(query); // TBD: try-catch
+    const bindingsArray = await streamToArray(bindingsStream);
+    const credIds = bindingsArray.map((bindings) => bindings.get('cred'));
+    if (credIds.length === 0) {
+        return undefined;
+    }
+    const credId = credIds[0];
+    if (credId == undefined
+        || (credId.termType !== 'NamedNode'
+            && credId.termType !== 'BlankNode')) {
+        return undefined;
+    }
+    const { items } = await store.get({ subject: credId });
+    // remove graph name
+    const cred = items.map((quad) => df.quad(quad.subject, quad.predicate, quad.object, df.defaultGraph()));
+    return cred;
+};
 export const getProofsId = async (graphIri, engine) => {
     const query = `
   SELECT ?proof
   WHERE {
     GRAPH <${graphIri}> {
-      ?c a <${VC_TYPE}> ;
+      ?cred a <${VC_TYPE}> ;
         <${PROOF}> ?proof .
     }
   }`;

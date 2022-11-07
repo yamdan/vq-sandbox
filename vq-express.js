@@ -127,17 +127,22 @@ app.get('/vsparql/', async (req, res, next) => {
     const revealedCredsArray = await Promise.all(bindingsArray
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
         .map(({ bindings, graphIriToBgpTriple }) => getRevealedQuads(graphIriToBgpTriple, graphPatterns, bindings, whereWithoutBgp, vars, df, engine, anonymizer))
-        .map(async (revealedQuads) => getWholeQuads(await revealedQuads, store, df, engine)));
+        .map(async (revealedQuads) => getWholeQuads(await revealedQuads, store, df, engine, anonymizer)));
     // get credential metadata and associated proofs
-    console.dir(revealedCredsArray, { depth: 6 });
+    console.dir(anonymizer, { depth: 6 });
     // serialize credentials
+    const VC_FRAME = {
+        '@context': CONTEXTS,
+        type: 'VerifiableCredential'
+    };
     const credJsonsArray = [];
     for (const creds of revealedCredsArray) {
         const credJsons = [];
-        for (const [_credGraphIri, { anonymizedQuads }] of creds) {
-            const credJson = await jsonld.fromRDF(anonymizedQuads);
+        for (const [_credGraphIri, { anonymizedCred }] of creds) {
+            const credJson = await jsonld.fromRDF(anonymizedCred);
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
-            credJsons.push(credJsonCompact);
+            const credJsonFramed = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
+            credJsons.push(credJsonFramed);
         }
         credJsonsArray.push(credJsons);
     }

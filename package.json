@@ -5,7 +5,7 @@
     "@rdfjs/sink": "^2.0.0",
     "@types/express": "^4.17.14",
     "@types/jest": "^29.2.0",
-    "@types/jsonld": "^1.5.7",
+    "@types/jsonld": "file:@types/jsonld",
     "@types/node": "^18.11.0",
     "@types/rdfjs__serializer-ntriples": "^1.0.2",
     "@types/sparqljs": "^3.1.3",

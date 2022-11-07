@@ -163,19 +163,26 @@ app.get('/vsparql/', async (req, res, next) => {
           await revealedQuads,
           store,
           df,
-          engine)));
+          engine,
+          anonymizer)));
 
   // get credential metadata and associated proofs
-  console.dir(revealedCredsArray, { depth: 6 });
+  console.dir(anonymizer, { depth: 6 });
 
   // serialize credentials
+  const VC_FRAME =
+  {
+    '@context': CONTEXTS,
+    type: 'VerifiableCredential'
+  };
   const credJsonsArray: jsonld.NodeObject[][] = [];
   for (const creds of revealedCredsArray) {
     const credJsons: jsonld.NodeObject[] = [];
-    for (const [_credGraphIri, { anonymizedQuads }] of creds) {
-      const credJson = await jsonld.fromRDF(anonymizedQuads);
+    for (const [_credGraphIri, { anonymizedCred }] of creds) {
+      const credJson = await jsonld.fromRDF(anonymizedCred);
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
-      credJsons.push(credJsonCompact);
+      const credJsonFramed = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
+      credJsons.push(credJsonFramed);
     }
     credJsonsArray.push(credJsons);
   }
