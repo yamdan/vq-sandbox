@@ -43,7 +43,7 @@ export const extractVars = (query) => {
 };
 // parse the original SELECT query to get Basic Graph Pattern (BGP)
 export const parseQuery = (query) => {
-    var _a, _b;
+    var _a;
     const parser = new sparqljs.Parser();
     let parsedQuery;
     try {
@@ -56,7 +56,7 @@ export const parseQuery = (query) => {
     catch (error) {
         return { error: 'malformed query' };
     }
-    // validate zkSPARQL query
+    // validate zk-SPARQL query
     const bgpPatterns = (_a = parsedQuery.where) === null || _a === void 0 ? void 0 : _a.filter((p) => p.type === 'bgp');
     if ((bgpPatterns === null || bgpPatterns === void 0 ? void 0 : bgpPatterns.length) !== 1) {
         return { error: 'WHERE clause must consist of only one basic graph pattern' };
@@ -67,11 +67,10 @@ export const parseQuery = (query) => {
         return { error: 'property paths are not supported' };
     }
     ;
-    const whereWithoutBgp = (_b = parsedQuery.where) === null || _b === void 0 ? void 0 : _b.filter((p) => p.type !== 'bgp');
     const gVarToBgpTriple = Object.assign({}, ...bgpTriples.map((triple, i) => ({
         [`${GRAPH_VAR_PREFIX}${i}`]: triple
     })));
-    return { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple };
+    return { parsedQuery, bgpTriples, gVarToBgpTriple };
 };
 export const isTripleWithoutPropertyPath = (triple) => 'type' in triple.predicate && triple.predicate.type === 'path' ? false : true;
 export const isTriplesWithoutPropertyPath = (triples) => triples.map(isTripleWithoutPropertyPath).every(Boolean);
@@ -134,7 +133,7 @@ export const getRevealedQuads = async (graphIriToBgpTriple, bindings, vars, df, 
     }
     return result;
 };
-export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer) => {
+export const getDocsAndProofs = async (revealedQuads, store, df, engine, anonymizer) => {
     var _a;
     const revealedCreds = new Map();
     for (const [graphIri, quads] of revealedQuads) {
@@ -170,12 +169,10 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
         const anonymizedDoc = metadata == undefined ? quads.anonymizedQuads
             : quads.anonymizedQuads.concat(anonymizedMetadata);
         revealedCreds.set(graphIri, {
-            anonymizedDoc,
-            anonymizedQuads: quads.anonymizedQuads,
-            revealedDoc,
-            revealedQuads: quads.revealedQuads,
-            proofs,
             wholeDoc,
+            revealedDoc,
+            anonymizedDoc,
+            proofs,
         });
     }
     return revealedCreds;

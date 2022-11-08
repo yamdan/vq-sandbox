@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -114,24 +114,18 @@ app.get('/sparql/', async (req, res, next) => {
         return next(new Error('SPARQL query must be SELECT form'));
     }
 });
-// verifiable SPARQL endpoint (fetch)
-app.get('/zk-sparql/fetch', async (req, res, next) => {
-    // get query string
-    const query = req.query.query;
-    if (typeof query !== 'string') {
-        return next(new Error('SPARQL query must be given as `query` parameter'));
-    }
+const fetch = async (query) => {
     // extract variables from SELECT query
     const vars = extractVars(query);
     if ('error' in vars) {
-        return next(new Error(vars.error));
+        return vars;
     }
     // parse SELECT query
     const parseResult = parseQuery(query);
     if ('error' in parseResult) {
-        return next(new Error(parseResult.error)); // TBD
+        return parseResult; // TBD
     }
-    const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
+    const { parsedQuery, bgpTriples, gVarToBgpTriple } = parseResult;
     // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
     const bindingsArray = await getExtendedBindings(bgpTriples, parsedQuery, df, engine);
     // get revealed and anonymized credentials
@@ -139,12 +133,26 @@ app.get('/zk-sparql/fetch', async (req, res, next) => {
     const revealedCredsArray = await Promise.all(bindingsArray
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
         .map(({ bindings, graphIriToBgpTriple }) => getRevealedQuads(graphIriToBgpTriple, bindings, vars, df, anonymizer))
-        .map(async (revealedQuads) => getWholeQuads(await revealedQuads, store, df, engine, anonymizer)));
+        .map(async (revealedQuads) => getDocsAndProofs(await revealedQuads, store, df, engine, anonymizer)));
+    return { vars, bindingsArray, revealedCredsArray };
+};
+// zk-SPARQL endpoint (fetch)
+app.get('/zk-sparql/fetch', async (req, res, next) => {
+    // parse query
+    const query = req.query.query;
+    if (typeof query !== 'string') {
+        return { 'error': 'SPARQL query must be given as `query` parameter' };
+    }
+    const queryResult = await fetch(query);
+    if ('error' in queryResult) {
+        return next(new Error(queryResult.error));
+    }
+    const { vars, bindingsArray, revealedCredsArray } = queryResult;
     // serialize credentials
     const vps = [];
     for (const creds of revealedCredsArray) {
         const vcs = [];
-        for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofs, wholeDoc }] of creds) {
+        for (const [_credGraphIri, { anonymizedDoc, proofs }] of creds) {
             // remove proof.proofValue
             const proofQuads = proofs.flat().filter((quad) => quad.predicate.value !== `${SEC_PREFIX}proofValue`);
             // concat document and proofs
@@ -158,12 +166,6 @@ app.get('/zk-sparql/fetch', async (req, res, next) => {
             // shape it to be a VC
             const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
             vcs.push(vc);
-            console.log('\n[wholeDoc]');
-            console.dir(wholeDoc, { depth: 7 });
-            console.log('\n[revealedDoc]');
-            console.dir(revealedDoc, { depth: 7 });
-            console.log('\n[anonymizedDoc]');
-            console.dir(anonymizedDoc, { depth: 7 });
         }
         const vp = Object.assign({}, VP_TEMPLATE);
         vp['verifiableCredential'] = vcs;
@@ -183,36 +185,36 @@ app.get('/zk-sparql/fetch', async (req, res, next) => {
     }
     jsonVars.push('vp');
     res.send(genJsonResults(jsonVars, bindingsWithVPArray));
+});
+// zk-SPARQL endpoint (derive proofs)
+app.get('/zk-sparql/', async (req, res, next) => {
+    // parse query
+    const query = req.query.query;
+    if (typeof query !== 'string') {
+        return { 'error': 'SPARQL query must be given as `query` parameter' };
+    }
+    const queryResult = await fetch(query);
+    if ('error' in queryResult) {
+        return next(new Error(queryResult.error));
+    }
+    const { vars, bindingsArray, revealedCredsArray } = queryResult;
+    // derive proofs
+    const vps = [];
+    for (const creds of revealedCredsArray) {
+        // const datasets = [];
+        for (const [_credGraphIri, { wholeDoc, revealedDoc, anonymizedDoc, proofs }] of creds) {
+            // // for each creds:
+            // const mask = mask(wholeDoc, revealedDoc, anonymizedDoc);
+            // // e.g.,
+            // //  {
+            // //    "1": [ undefined, undefined, "anoni:0" ],
+            // //    "2": [ undefined, undefined, undefined ],
+            // //    "5": [ "anoni:0", undefined, "anoni:1" ]
+            // //  }
+            // datasets.push([wholeDoc, proofs, mask]);
+        }
+        // const derivedProofs = deriveProofRdf(datasets, mask, suite, documentLoader);
+    }
     // run rdf-signatures-bbs to get derived proofs
     // attach derived proofs
-});
-// verifiable SPARQL endpoint (derive proofs)
-app.get('/zk-sparql/', async (req, res, next) => {
-    // request
-    //   - (credGraphIri, revealed doc)[]
-    //   - hidden iris
-    // response
-    //   - vp
-    // // get original credentials
-    // // TBD: unnecessary in fetching stage
-    // const credsArray = [];
-    // for (const credGraphIriToBgpTriple of credGraphIriToBgpTriples) {
-    //   const creds = [];
-    //   for (const credGraphIri of credGraphIriToBgpTriple.keys()) {
-    //     // get whole document (without proof)
-    //     const { items: docWithGraphIri } = await store.get({ graph: df.namedNode(credGraphIri) });
-    //     const doc = docWithGraphIri.map((quad) => df.quad(quad.subject, quad.predicate, quad.object)); // remove graph name
-    //     // get proofs
-    //     const { items: proofIdQuads } = await store.get({ predicate: df.namedNode(PROOF), graph: df.namedNode(credGraphIri) });
-    //     const proofs = [];
-    //     for (const proofId of proofIdQuads.map((proofIdQuad: RDF.Quad) => proofIdQuad.object.value)) {
-    //       const { items: proofQuads } = await store.get({ graph: df.blankNode(proofId) });
-    //       proofs.push(proofQuads);
-    //     }
-    //     creds.push({
-    //       doc, proofs
-    //     });
-    //   };
-    //   credsArray.push(creds);
-    // };
 });

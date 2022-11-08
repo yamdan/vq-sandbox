@@ -53,7 +53,6 @@ type IdentifyCredsResultType = {
 type ParseQueryResult = {
   parsedQuery: sparqljs.SelectQuery;
   bgpTriples: ZkTripleBgp[];
-  whereWithoutBgp: sparqljs.Pattern[] | undefined;
   gVarToBgpTriple: Record<string, ZkTripleBgp>;
 } | {
   error: string;
@@ -65,12 +64,10 @@ export interface RevealedQuads {
 };
 
 export interface RevealedCreds {
-  anonymizedDoc: RDF.Quad[];
-  anonymizedQuads: RDF.Quad[];
-  revealedDoc: RDF.Quad[];
-  revealedQuads: RDF.Quad[];
-  proofs: RDF.Quad[][];
   wholeDoc: RDF.Quad[];
+  revealedDoc: RDF.Quad[];
+  anonymizedDoc: RDF.Quad[];
+  proofs: RDF.Quad[][];
 };
 
 // ** functions ** //
@@ -119,7 +116,7 @@ export const parseQuery = (query: string): ParseQueryResult => {
     return { error: 'malformed query' };
   }
 
-  // validate zkSPARQL query
+  // validate zk-SPARQL query
   const bgpPatterns = parsedQuery.where?.filter((p) => p.type === 'bgp');
   if (bgpPatterns?.length !== 1) {
     return { error: 'WHERE clause must consist of only one basic graph pattern' }
@@ -130,12 +127,11 @@ export const parseQuery = (query: string): ParseQueryResult => {
     return { error: 'property paths are not supported' };
   };
 
-  const whereWithoutBgp = parsedQuery.where?.filter((p) => p.type !== 'bgp');
   const gVarToBgpTriple: Record<string, ZkTripleBgp> = Object.assign({}, ...bgpTriples.map((triple, i) => ({
     [`${GRAPH_VAR_PREFIX}${i}`]: triple
   })));
 
-  return { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple };
+  return { parsedQuery, bgpTriples, gVarToBgpTriple };
 }
 
 export const isTripleWithoutPropertyPath =
@@ -229,7 +225,7 @@ export const getRevealedQuads = async (
   return result;
 };
 
-export const getWholeQuads = async (
+export const getDocsAndProofs = async (
   revealedQuads: Map<string, RevealedQuads>,
   store: Quadstore,
   df: DataFactory<RDF.Quad>,
@@ -285,12 +281,10 @@ export const getWholeQuads = async (
         : quads.anonymizedQuads.concat(anonymizedMetadata);
 
     revealedCreds.set(graphIri, {
-      anonymizedDoc,
-      anonymizedQuads: quads.anonymizedQuads,
-      revealedDoc,
-      revealedQuads: quads.revealedQuads,
-      proofs,
       wholeDoc,
+      revealedDoc,
+      anonymizedDoc,
+      proofs,
     });
   }
   return revealedCreds;
