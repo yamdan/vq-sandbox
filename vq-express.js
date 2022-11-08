@@ -4,7 +4,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -37,7 +37,6 @@ const VP_TEMPLATE = {
     '@context': CONTEXTS,
     type: 'VerifiablePresentation',
     verifiableCredential: [],
-    proof: [],
 };
 const RDF_PREFIX = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const SEC_PREFIX = 'https://w3id.org/security#';
@@ -116,7 +115,7 @@ app.get('/sparql/', async (req, res, next) => {
     }
 });
 // verifiable SPARQL endpoint (fetch)
-app.get('/vsparql/', async (req, res, next) => {
+app.get('/zk-sparql/fetch', async (req, res, next) => {
     // get query string
     const query = req.query.query;
     if (typeof query !== 'string') {
@@ -134,8 +133,7 @@ app.get('/vsparql/', async (req, res, next) => {
     }
     const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
     // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
-    const graphPatterns = genGraphPatterns(bgpTriples, df);
-    const bindingsArray = await getExtendedBindings(parsedQuery, graphPatterns, df, engine);
+    const bindingsArray = await getExtendedBindings(bgpTriples, parsedQuery, df, engine);
     // get revealed and anonymized credentials
     const anonymizer = new Anonymizer(df);
     const revealedCredsArray = await Promise.all(bindingsArray
@@ -146,9 +144,9 @@ app.get('/vsparql/', async (req, res, next) => {
     const vps = [];
     for (const creds of revealedCredsArray) {
         const vcs = [];
-        for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofQuadsArray, wholeDoc }] of creds) {
+        for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofs, wholeDoc }] of creds) {
             // remove proof.proofValue
-            const proofQuads = proofQuadsArray.flat().filter((quad) => quad.predicate.value !== `${SEC_PREFIX}proofValue`);
+            const proofQuads = proofs.flat().filter((quad) => quad.predicate.value !== `${SEC_PREFIX}proofValue`);
             // concat document and proofs
             const anonymizedCred = anonymizedDoc.concat(proofQuads);
             // add bnode prefix `_:` to blank node ids
@@ -160,6 +158,12 @@ app.get('/vsparql/', async (req, res, next) => {
             // shape it to be a VC
             const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
             vcs.push(vc);
+            console.log('\n[wholeDoc]');
+            console.dir(wholeDoc, { depth: 7 });
+            console.log('\n[revealedDoc]');
+            console.dir(revealedDoc, { depth: 7 });
+            console.log('\n[anonymizedDoc]');
+            console.dir(anonymizedDoc, { depth: 7 });
         }
         const vp = Object.assign({}, VP_TEMPLATE);
         vp['verifiableCredential'] = vcs;
@@ -183,7 +187,7 @@ app.get('/vsparql/', async (req, res, next) => {
     // attach derived proofs
 });
 // verifiable SPARQL endpoint (derive proofs)
-app.get('/deriveProof/', async (req, res, next) => {
+app.get('/zk-sparql/', async (req, res, next) => {
     // request
     //   - (credGraphIri, revealed doc)[]
     //   - hidden iris

@@ -69,7 +69,7 @@ export interface RevealedCreds {
   anonymizedQuads: RDF.Quad[];
   revealedDoc: RDF.Quad[];
   revealedQuads: RDF.Quad[];
-  proofQuadsArray: RDF.Quad[][];
+  proofs: RDF.Quad[][];
   wholeDoc: RDF.Quad[];
 };
 
@@ -148,28 +148,26 @@ export const isTriplesWithoutPropertyPath =
     triples is ZkTripleBgp[] =>
     triples.map(isTripleWithoutPropertyPath).every(Boolean);
 
-export const genGraphPatterns = (
-  bgpTriples: sparqljs.Triple[],
-  df: DataFactory<RDF.Quad>
-): sparqljs.GraphPattern[] =>
-  bgpTriples.map((triple, i) => (
-    {
-      type: 'graph',
-      patterns: [{
-        type: 'bgp',
-        triples: [triple]
-      }],
-      name: df.variable(`${GRAPH_VAR_PREFIX}${i}`),
-    }
-  ));
-
 // identify credentials related to the given query
 export const getExtendedBindings = async (
+  bgpTriples: sparqljs.Triple[],
   parsedQuery: sparqljs.SelectQuery,
-  graphPatterns: sparqljs.GraphPattern[],
   df: DataFactory<RDF.Quad>,
   engine: Engine
 ) => {
+  // generate graph patterns
+  const graphPatterns: sparqljs.GraphPattern[]
+    = bgpTriples.map((triple, i) => (
+      {
+        type: 'graph',
+        patterns: [{
+          type: 'bgp',
+          triples: [triple]
+        }],
+        name: df.variable(`${GRAPH_VAR_PREFIX}${i}`),
+      }
+    ));
+
   // generate a new SELECT query to identify named graphs
   parsedQuery.distinct = true;
   parsedQuery.variables = [new sparqljs.Wildcard()];
@@ -220,7 +218,7 @@ export const getRevealedQuads = async (
         && object != undefined && isZkObject(object)) {
         return [df.quad(subject, predicate, object, graph)];
       } else {
-        return []
+        return [];
       }
     });
     const anonymizedQuads = isWildcard(vars)
@@ -244,6 +242,11 @@ export const getWholeQuads = async (
     const vc = await store.get({
       graph: df.namedNode(graphIri)
     });
+    // remove graph name
+    const wholeDoc = vc.items.map((quad) =>
+      df.quad(quad.subject, quad.predicate, quad.object)
+    );
+
     // get associated proofs
     const proofs = await Promise.all(
       (await getProofsId(graphIri, engine)).flatMap(
@@ -256,6 +259,7 @@ export const getWholeQuads = async (
           });
           return proof.items;
         }));
+
     // get revealed credential by addding metadata to revealed quads
     const metadata = await getCredentialMetadata(graphIri, df, store, engine)
       ?? [];
@@ -285,8 +289,8 @@ export const getWholeQuads = async (
       anonymizedQuads: quads.anonymizedQuads,
       revealedDoc,
       revealedQuads: quads.revealedQuads,
-      proofQuadsArray: proofs,
-      wholeDoc: vc.items,
+      proofs,
+      wholeDoc,
     });
   }
   return revealedCreds;

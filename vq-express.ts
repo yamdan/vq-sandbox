@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genGraphPatterns, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getWholeQuads, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -41,30 +41,17 @@ const VC_FRAME =
   type: 'VerifiableCredential',
   proof: {}  // explicitly required otherwise `sec:proof` is used instead
 };
-// const VP_FRAME =
-// {
-//   '@context': CONTEXTS,
-//   type: 'VerifiablePresentation',
-//   verifiableCredential: [
-//     {
-//       type: 'VerifiableCredential',
-//       proof: {}  // explicitly required otherwise `sec:proof` is used instead
-//     }
-//   ]
-// };
 type VP =
   {
     '@context': any;
     type: 'VerifiablePresentation';
     verifiableCredential: jsonld.NodeObject[];
-    proof: [];
   };
 const VP_TEMPLATE: VP =
 {
   '@context': CONTEXTS,
   type: 'VerifiablePresentation',
   verifiableCredential: [],
-  proof: [],
 };
 const RDF_PREFIX = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const SEC_PREFIX = 'https://w3id.org/security#';
@@ -149,8 +136,9 @@ app.get('/sparql/', async (req, res, next) => {
   }
 });
 
+
 // verifiable SPARQL endpoint (fetch)
-app.get('/vsparql/', async (req, res, next) => {
+app.get('/zk-sparql/fetch', async (req, res, next) => {
   // get query string
   const query = req.query.query;
   if (typeof query !== 'string') {
@@ -171,9 +159,8 @@ app.get('/vsparql/', async (req, res, next) => {
   const { parsedQuery, bgpTriples, whereWithoutBgp, gVarToBgpTriple } = parseResult;
 
   // get extended bindings, i.e., bindings (SELECT query responses) + associated graph names corresponding to each BGP triples
-  const graphPatterns = genGraphPatterns(bgpTriples, df);
   const bindingsArray = await getExtendedBindings(
-    parsedQuery, graphPatterns, df, engine);
+    bgpTriples, parsedQuery, df, engine);
 
   // get revealed and anonymized credentials
   const anonymizer = new Anonymizer(df);
@@ -202,9 +189,9 @@ app.get('/vsparql/', async (req, res, next) => {
   const vps: VP[] = [];
   for (const creds of revealedCredsArray) {
     const vcs: jsonld.NodeObject[] = [];
-    for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofQuadsArray, wholeDoc }] of creds) {
+    for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofs, wholeDoc }] of creds) {
       // remove proof.proofValue
-      const proofQuads = proofQuadsArray.flat().filter(
+      const proofQuads = proofs.flat().filter(
         (quad) =>
           quad.predicate.value !== `${SEC_PREFIX}proofValue`
       );
@@ -251,7 +238,7 @@ app.get('/vsparql/', async (req, res, next) => {
 });
 
 // verifiable SPARQL endpoint (derive proofs)
-app.get('/deriveProof/', async (req, res, next) => {
+app.get('/zk-sparql/', async (req, res, next) => {
   // request
   //   - (credGraphIri, revealed doc)[]
   //   - hidden iris

@@ -75,17 +75,18 @@ export const parseQuery = (query) => {
 };
 export const isTripleWithoutPropertyPath = (triple) => 'type' in triple.predicate && triple.predicate.type === 'path' ? false : true;
 export const isTriplesWithoutPropertyPath = (triples) => triples.map(isTripleWithoutPropertyPath).every(Boolean);
-export const genGraphPatterns = (bgpTriples, df) => bgpTriples.map((triple, i) => ({
-    type: 'graph',
-    patterns: [{
-            type: 'bgp',
-            triples: [triple]
-        }],
-    name: df.variable(`${GRAPH_VAR_PREFIX}${i}`),
-}));
 // identify credentials related to the given query
-export const getExtendedBindings = async (parsedQuery, graphPatterns, df, engine) => {
+export const getExtendedBindings = async (bgpTriples, parsedQuery, df, engine) => {
     var _a;
+    // generate graph patterns
+    const graphPatterns = bgpTriples.map((triple, i) => ({
+        type: 'graph',
+        patterns: [{
+                type: 'bgp',
+                triples: [triple]
+            }],
+        name: df.variable(`${GRAPH_VAR_PREFIX}${i}`),
+    }));
     // generate a new SELECT query to identify named graphs
     parsedQuery.distinct = true;
     parsedQuery.variables = [new sparqljs.Wildcard()];
@@ -141,6 +142,8 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
         const vc = await store.get({
             graph: df.namedNode(graphIri)
         });
+        // remove graph name
+        const wholeDoc = vc.items.map((quad) => df.quad(quad.subject, quad.predicate, quad.object));
         // get associated proofs
         const proofs = await Promise.all((await getProofsId(graphIri, engine)).flatMap(async (proofId) => {
             if (proofId == undefined) {
@@ -171,8 +174,8 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
             anonymizedQuads: quads.anonymizedQuads,
             revealedDoc,
             revealedQuads: quads.revealedQuads,
-            proofQuadsArray: proofs,
-            wholeDoc: vc.items,
+            proofs,
+            wholeDoc,
         });
     }
     return revealedCreds;
