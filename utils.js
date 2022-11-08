@@ -153,7 +153,7 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
         }));
         // get revealed credential by addding metadata to revealed quads
         const metadata = (_a = await getCredentialMetadata(graphIri, df, store, engine)) !== null && _a !== void 0 ? _a : [];
-        const revealedCred = quads.revealedQuads.concat(metadata);
+        const revealedDoc = quads.revealedQuads.concat(metadata);
         // get anonymized credential by addding metadata to anonymized quads
         const anonymizedMetadata = metadata.map((quad) => {
             const subject = isZkSubject(quad.subject) ?
@@ -164,15 +164,15 @@ export const getWholeQuads = async (revealedQuads, store, df, engine, anonymizer
                 anonymizer.getObject(quad.object) : quad.object;
             return df.quad(subject != undefined ? subject : quad.subject, predicate != undefined ? predicate : quad.predicate, object != undefined ? object : quad.object, df.defaultGraph());
         });
-        const anonymizedCred = metadata == undefined ? quads.anonymizedQuads
+        const anonymizedDoc = metadata == undefined ? quads.anonymizedQuads
             : quads.anonymizedQuads.concat(anonymizedMetadata);
         revealedCreds.set(graphIri, {
-            revealedQuads: quads.revealedQuads,
+            anonymizedDoc,
             anonymizedQuads: quads.anonymizedQuads,
-            wholeQuads: vc.items,
-            revealedCred,
-            anonymizedCred,
-            proofQuadsArray: proofs
+            revealedDoc,
+            revealedQuads: quads.revealedQuads,
+            proofQuadsArray: proofs,
+            wholeDoc: vc.items,
         });
     }
     return revealedCreds;

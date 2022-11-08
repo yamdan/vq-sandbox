@@ -65,12 +65,12 @@ export interface RevealedQuads {
 };
 
 export interface RevealedCreds {
-  revealedQuads: RDF.Quad[];
+  anonymizedDoc: RDF.Quad[];
   anonymizedQuads: RDF.Quad[];
-  wholeQuads: RDF.Quad[];
-  revealedCred: RDF.Quad[];
-  anonymizedCred: RDF.Quad[];
+  revealedDoc: RDF.Quad[];
+  revealedQuads: RDF.Quad[];
   proofQuadsArray: RDF.Quad[][];
+  wholeDoc: RDF.Quad[];
 };
 
 // ** functions ** //
@@ -259,7 +259,7 @@ export const getWholeQuads = async (
     // get revealed credential by addding metadata to revealed quads
     const metadata = await getCredentialMetadata(graphIri, df, store, engine)
       ?? [];
-    const revealedCred = quads.revealedQuads.concat(metadata);
+    const revealedDoc = quads.revealedQuads.concat(metadata);
 
     // get anonymized credential by addding metadata to anonymized quads
     const anonymizedMetadata = metadata.map((quad) => {
@@ -276,17 +276,17 @@ export const getWholeQuads = async (
         df.defaultGraph(),
       );
     });
-    const anonymizedCred =
+    const anonymizedDoc =
       metadata == undefined ? quads.anonymizedQuads
         : quads.anonymizedQuads.concat(anonymizedMetadata);
 
     revealedCreds.set(graphIri, {
-      revealedQuads: quads.revealedQuads,
+      anonymizedDoc,
       anonymizedQuads: quads.anonymizedQuads,
-      wholeQuads: vc.items,
-      revealedCred,
-      anonymizedCred,
-      proofQuadsArray: proofs
+      revealedDoc,
+      revealedQuads: quads.revealedQuads,
+      proofQuadsArray: proofs,
+      wholeDoc: vc.items,
     });
   }
   return revealedCreds;

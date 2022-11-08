@@ -35,6 +35,40 @@ const customDocLoader = (url: string): any => {
   );
 };
 
+const VC_FRAME =
+{
+  '@context': CONTEXTS,
+  type: 'VerifiableCredential',
+  proof: {}  // explicitly required otherwise `sec:proof` is used instead
+};
+// const VP_FRAME =
+// {
+//   '@context': CONTEXTS,
+//   type: 'VerifiablePresentation',
+//   verifiableCredential: [
+//     {
+//       type: 'VerifiableCredential',
+//       proof: {}  // explicitly required otherwise `sec:proof` is used instead
+//     }
+//   ]
+// };
+type VP =
+  {
+    '@context': any;
+    type: 'VerifiablePresentation';
+    verifiableCredential: jsonld.NodeObject[];
+    proof: [];
+  };
+const VP_TEMPLATE: VP =
+{
+  '@context': CONTEXTS,
+  type: 'VerifiablePresentation',
+  verifiableCredential: [],
+  proof: [],
+};
+const RDF_PREFIX = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const SEC_PREFIX = 'https://w3id.org/security#';
+
 // setup quadstore
 const backend = new MemoryLevel();
 const df = new DataFactory();
@@ -165,28 +199,38 @@ app.get('/vsparql/', async (req, res, next) => {
           anonymizer)));
 
   // serialize credentials
-  const VC_FRAME =
-  {
-    '@context': CONTEXTS,
-    type: 'VerifiableCredential'
-  };
-  const credJsonsArray: jsonld.NodeObject[][] = [];
+  const vps: VP[] = [];
   for (const creds of revealedCredsArray) {
-    const credJsons: jsonld.NodeObject[] = [];
-    for (const [_credGraphIri, { anonymizedCred }] of creds) {
+    const vcs: jsonld.NodeObject[] = [];
+    for (const [_credGraphIri, { anonymizedDoc, anonymizedQuads, revealedDoc, revealedQuads, proofQuadsArray, wholeDoc }] of creds) {
+      // remove proof.proofValue
+      const proofQuads = proofQuadsArray.flat().filter(
+        (quad) =>
+          quad.predicate.value !== `${SEC_PREFIX}proofValue`
+      );
+      // concat document and proofs
+      const anonymizedCred = anonymizedDoc.concat(proofQuads);
+      // add bnode prefix `_:` to blank node ids
       const anonymizedCredWithBnodePrefix = anonymizedCred.map((quad) => addBnodePrefix(quad));
+      // RDF to JSON-LD
       const credJson = await jsonld.fromRDF(anonymizedCredWithBnodePrefix);
+      // to compact JSON-LD
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
-      const credJsonFramed = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
-      credJsons.push(credJsonFramed);
+      // shape it to be a VC
+      const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
+      vcs.push(vc);
     }
-    credJsonsArray.push(credJsons);
+    const vp = { ...VP_TEMPLATE };
+    vp['verifiableCredential'] = vcs;
+    vps.push(vp);
   }
 
   // add VP (or VCs) to bindings
-  const bindingsWithVPArray = bindingsArray.map((bindings, i) =>
-    bindings.set('vp', df.literal(JSON.stringify(credJsonsArray[i]), df.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON')))
-  );
+  const bindingsWithVPArray = bindingsArray.map(
+    (bindings, i) =>
+      bindings.set('vp', df.literal(
+        `${JSON.stringify(vps[i], null, 2)}`,
+        df.namedNode(`${RDF_PREFIX}JSON`))));
 
   // send response
   let jsonVars: string[];
