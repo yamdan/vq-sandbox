@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, ANON_PREFIX } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -256,30 +256,49 @@ app.get('/zk-sparql/', async (req, res, next) => {
   // derive proofs
   const vps: VP[] = [];
   for (const creds of revealedCredsArray) {
-
-    // const datasets = [];
-    
+    const datasets = [];
     for (const [_credGraphIri, { wholeDoc, revealedDoc, anonymizedDoc, proofs }] of creds) {
+      console.log('\nwholeDoc: \n');
+      console.dir(wholeDoc, { depth: 7 });
+      console.log('\nanonymizedDoc: \n');
+      console.dir(anonymizedDoc, { depth: 7 });
 
-      // // for each creds:
-      // const mask = mask(wholeDoc, revealedDoc, anonymizedDoc);
-      // // e.g.,
-      // //  {
-      // //    "1": [ undefined, undefined, "anoni:0" ],
-      // //    "2": [ undefined, undefined, undefined ],
-      // //    "5": [ "anoni:0", undefined, "anoni:1" ]
-      // //  }
+      // generate indexed mask, e.g.,
+      // {
+      //   "1": [ undefined, undefined, "anoni:0", undefined ],
+      //   "2": [ undefined, undefined, undefined, undefined ],
+      //   "5": [ "anoni:0", undefined, "anoni:1", undefined ]
+      // }
+      const mask = anonymizedDoc.map((quad) => [
+        quad.subject.value.startsWith(ANON_PREFIX) ? quad.subject.value : undefined,
+        quad.predicate.value.startsWith(ANON_PREFIX) ? quad.predicate.value : undefined,
+        quad.object.value.startsWith(ANON_PREFIX) ? quad.object.value : undefined,
+        quad.graph.value.startsWith(ANON_PREFIX) ? quad.graph.value : undefined,
+      ]);
+      const revealIndex = revealedDoc.map((revealedQuad) => 
+        wholeDoc.findIndex((wholeQuad) => wholeQuad.equals(revealedQuad)));
+      const indexedMask = Object.fromEntries(revealIndex.map((i, j) => [i, mask[j]]));
+      console.log(indexedMask);
 
-      // datasets.push([wholeDoc, proofs, mask]);
-
+      datasets.push({ document: wholeDoc, proof: proofs, revealDocument: mask });
     }
+    console.dir(datasets, { depth: 8 });
 
     // const derivedProofs = deriveProofRdf(datasets, mask, suite, documentLoader);
 
   }
 
-  // run rdf-signatures-bbs to get derived proofs
-
   // attach derived proofs
 
+// send response
+let jsonVars: string[];
+if (isWildcard(vars)) {
+  // SELECT * WHERE {...}
+  jsonVars = bindingsArray.length >= 1 ? [...bindingsArray[0].keys()].map((k) => k.value) : [''];
+} else {
+  // SELECT ?s ?p ?o WHERE {...}
+  jsonVars = vars.map((v) => v.value);
+}
+//jsonVars.push('vp');
+res.send(genJsonResults(jsonVars, bindingsArray));
 })

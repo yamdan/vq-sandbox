@@ -10,6 +10,7 @@ import { Quadstore } from 'quadstore';
 const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
 const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
+export const ANON_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/';
 const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
 const ANONB_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/bnid#';
 const ANONL_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/literal#';
