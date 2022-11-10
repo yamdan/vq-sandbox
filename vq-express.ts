@@ -1,5 +1,6 @@
 import express from 'express';
 import jsonld from 'jsonld';
+import canonize from 'rdf-canonize';
 import * as RDF from '@rdfjs/types';
 import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
@@ -177,7 +178,8 @@ const fetch = async (query: string) => {
           engine,
           anonymizer)));
 
-  return { vars, bindingsArray, revealedCredsArray };
+  const deAnonMap = anonymizer.deAnonMap;
+  return { vars, bindingsArray, revealedCredsArray, deAnonMap };
 }
 
 // zk-SPARQL endpoint (fetch)
@@ -251,18 +253,13 @@ app.get('/zk-sparql/', async (req, res, next) => {
   if ('error' in queryResult) {
     return next(new Error(queryResult.error));
   }
-  const { vars, bindingsArray, revealedCredsArray } = queryResult;
+  const { vars, bindingsArray, revealedCredsArray, deAnonMap } = queryResult;
 
   // derive proofs
   const vps: VP[] = [];
   for (const creds of revealedCredsArray) {
     const datasets = [];
     for (const [_credGraphIri, { wholeDoc, revealedDoc, anonymizedDoc, proofs }] of creds) {
-      console.log('\nwholeDoc: \n');
-      console.dir(wholeDoc, { depth: 7 });
-      console.log('\nanonymizedDoc: \n');
-      console.dir(anonymizedDoc, { depth: 7 });
-
       // generate indexed mask, e.g.,
       // {
       //   "1": [ undefined, undefined, "anoni:0", undefined ],
@@ -278,10 +275,13 @@ app.get('/zk-sparql/', async (req, res, next) => {
       const revealIndex = revealedDoc.map((revealedQuad) => 
         wholeDoc.findIndex((wholeQuad) => wholeQuad.equals(revealedQuad)));
       const indexedMask = Object.fromEntries(revealIndex.map((i, j) => [i, mask[j]]));
-      console.log(indexedMask);
 
-      datasets.push({ document: wholeDoc, proof: proofs, revealDocument: mask });
+      const canonicalizedDoc = await canonize.canonize(wholeDoc, {
+        algorithm: 'URDNA2015+'
+      });
+      datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, deAnonMap, canonicalizedDoc, indexedMask });
     }
+
     console.dir(datasets, { depth: 8 });
 
     // const derivedProofs = deriveProofRdf(datasets, mask, suite, documentLoader);

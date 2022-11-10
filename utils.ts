@@ -292,42 +292,46 @@ export const getDocsAndProofs = async (
 }
 
 export class Anonymizer {
-  varToAnon: Map<string, sparqljs.IriTerm>;
-  varToAnonBlank: Map<string, sparqljs.IriTerm>;
-  varToAnonLiteral: Map<string, sparqljs.LiteralTerm>;
+  iriToAnonMap: Map<string, sparqljs.IriTerm>;
+  bnodeToAnonMap: Map<string, sparqljs.IriTerm>;
+  literalToAnonMap: Map<string, sparqljs.LiteralTerm>;
+  deAnonMap: Map<string, ZkTerm>;
   df: DataFactory<RDF.Quad>;
 
   constructor(df: DataFactory<RDF.Quad>) {
-    this.varToAnon = new Map<string, sparqljs.IriTerm>();
-    this.varToAnonBlank = new Map<string, sparqljs.IriTerm>();
-    this.varToAnonLiteral = new Map<string, sparqljs.LiteralTerm>();
+    this.iriToAnonMap = new Map<string, sparqljs.IriTerm>();
+    this.bnodeToAnonMap = new Map<string, sparqljs.IriTerm>();
+    this.literalToAnonMap = new Map<string, sparqljs.LiteralTerm>();
+    this.deAnonMap = new Map<string, ZkTerm>();
     this.df = df;
   }
 
-  private _genKey = (val: ZkTerm, varName?: string) =>
+  private _genKey = (val: ZkTerm) =>
     val.termType === 'Literal' ?
-      `${varName ?? ''}:${val.termType}:${val.value}:${nanoid(NANOID_LEN)}` :
-      `${varName ?? ''}:${val.termType}:${val.value}`;
+      `${val.value}:${nanoid(NANOID_LEN)}` :
+      `${val.value}`;
 
-  anonymize = (val: ZkSubject | ZkPredicate, varName?: string) => {
-    const key = this._genKey(val, varName);
+  anonymize = (val: ZkSubject | ZkPredicate) => {
+    const key = this._genKey(val);
     let anon: sparqljs.IriTerm;
     if (val.termType === 'NamedNode') {
-      const result = this.varToAnon.get(key);
+      const result = this.iriToAnonMap.get(key);
       if (result != undefined) {
         return result;
       }
-      anon = this.df.namedNode(
-        `${ANONI_PREFIX}${nanoid(NANOID_LEN)}`) as sparqljs.IriTerm;
-      this.varToAnon.set(key, anon);
+      const anonIri = `${ANONI_PREFIX}${nanoid(NANOID_LEN)}`;
+      anon = this.df.namedNode(anonIri) as sparqljs.IriTerm;
+      this.iriToAnonMap.set(key, anon);
+      this.deAnonMap.set(anonIri, val);
     } else {
-      const result = this.varToAnonBlank.get(key);
+      const result = this.bnodeToAnonMap.get(key);
       if (result != undefined) {
         return result;
       }
-      anon = this.df.namedNode(
-        `${ANONB_PREFIX}${nanoid(NANOID_LEN)}`) as sparqljs.IriTerm;
-      this.varToAnonBlank.set(key, anon);
+      const anonBnid = `${ANONB_PREFIX}${nanoid(NANOID_LEN)}`;
+      anon = this.df.namedNode(anonBnid) as sparqljs.IriTerm;
+      this.bnodeToAnonMap.set(key, anon);
+      this.deAnonMap.set(anonBnid, val);
     }
     return anon;
   };
@@ -335,36 +339,26 @@ export class Anonymizer {
   get = (val: ZkSubject | ZkPredicate) => {
     const key = this._genKey(val);
     if (val.termType === 'NamedNode') {
-      return this.varToAnon.get(key);
+      return this.iriToAnonMap.get(key);
     } else {
-      return this.varToAnonBlank.get(key);
+      return this.bnodeToAnonMap.get(key);
     }
   };
 
-  anonymizeObject = (val: ZkObject, varName?: string) => {
-    const key = this._genKey(val, varName);
-    let anon: sparqljs.IriTerm | sparqljs.LiteralTerm;
+  anonymizeObject = (val: ZkObject) => {
     if (val.termType === 'NamedNode' || val.termType === 'BlankNode') {
-      return this.anonymize(val, varName);
-    } else {
-      const result = this.varToAnonLiteral.get(key);
-      if (result != undefined) {
-        return result;
-      }
-      if (val.language !== '') {
-        anon = this.df.literal(
-          `${ANONL_PREFIX}${nanoid(NANOID_LEN)}`,
-          val.language
-        ) as sparqljs.LiteralTerm;
-        this.varToAnonLiteral.set(key, anon);
-      } else {
-        anon = this.df.literal(
-          `${ANONL_PREFIX}${nanoid(NANOID_LEN)}`,
-          val.datatype
-        ) as sparqljs.LiteralTerm;
-        this.varToAnonLiteral.set(key, anon);
-      }
+      return this.anonymize(val);
     }
+    const key = this._genKey(val);
+    const result = this.literalToAnonMap.get(key);
+    if (result != undefined) {
+      return result;
+    }
+    const anonLiteral = `${ANONL_PREFIX}${nanoid(NANOID_LEN)}`;
+    const languageOrDatatype = val.language !== '' ? val.language : val.datatype;
+    const anon = this.df.literal(anonLiteral, languageOrDatatype) as sparqljs.LiteralTerm;
+    this.literalToAnonMap.set(key, anon);
+    this.deAnonMap.set(anonLiteral, val);
     return anon;
   };
 
@@ -373,7 +367,7 @@ export class Anonymizer {
     if (val.termType === 'NamedNode' || val.termType === 'BlankNode') {
       return this.get(val);
     } else {
-      return this.varToAnonLiteral.get(key);
+      return this.literalToAnonMap.get(key);
     }
   };
 }

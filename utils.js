@@ -180,59 +180,57 @@ export const getDocsAndProofs = async (revealedQuads, store, df, engine, anonymi
 };
 export class Anonymizer {
     constructor(df) {
-        this._genKey = (val, varName) => val.termType === 'Literal' ?
-            `${varName !== null && varName !== void 0 ? varName : ''}:${val.termType}:${val.value}:${nanoid(NANOID_LEN)}` :
-            `${varName !== null && varName !== void 0 ? varName : ''}:${val.termType}:${val.value}`;
-        this.anonymize = (val, varName) => {
-            const key = this._genKey(val, varName);
+        this._genKey = (val) => val.termType === 'Literal' ?
+            `${val.value}:${nanoid(NANOID_LEN)}` :
+            `${val.value}`;
+        this.anonymize = (val) => {
+            const key = this._genKey(val);
             let anon;
             if (val.termType === 'NamedNode') {
-                const result = this.varToAnon.get(key);
+                const result = this.iriToAnonMap.get(key);
                 if (result != undefined) {
                     return result;
                 }
-                anon = this.df.namedNode(`${ANONI_PREFIX}${nanoid(NANOID_LEN)}`);
-                this.varToAnon.set(key, anon);
+                const anonIri = `${ANONI_PREFIX}${nanoid(NANOID_LEN)}`;
+                anon = this.df.namedNode(anonIri);
+                this.iriToAnonMap.set(key, anon);
+                this.deAnonMap.set(anonIri, val);
             }
             else {
-                const result = this.varToAnonBlank.get(key);
+                const result = this.bnodeToAnonMap.get(key);
                 if (result != undefined) {
                     return result;
                 }
-                anon = this.df.namedNode(`${ANONB_PREFIX}${nanoid(NANOID_LEN)}`);
-                this.varToAnonBlank.set(key, anon);
+                const anonBnid = `${ANONB_PREFIX}${nanoid(NANOID_LEN)}`;
+                anon = this.df.namedNode(anonBnid);
+                this.bnodeToAnonMap.set(key, anon);
+                this.deAnonMap.set(anonBnid, val);
             }
             return anon;
         };
         this.get = (val) => {
             const key = this._genKey(val);
             if (val.termType === 'NamedNode') {
-                return this.varToAnon.get(key);
+                return this.iriToAnonMap.get(key);
             }
             else {
-                return this.varToAnonBlank.get(key);
+                return this.bnodeToAnonMap.get(key);
             }
         };
-        this.anonymizeObject = (val, varName) => {
-            const key = this._genKey(val, varName);
-            let anon;
+        this.anonymizeObject = (val) => {
             if (val.termType === 'NamedNode' || val.termType === 'BlankNode') {
-                return this.anonymize(val, varName);
+                return this.anonymize(val);
             }
-            else {
-                const result = this.varToAnonLiteral.get(key);
-                if (result != undefined) {
-                    return result;
-                }
-                if (val.language !== '') {
-                    anon = this.df.literal(`${ANONL_PREFIX}${nanoid(NANOID_LEN)}`, val.language);
-                    this.varToAnonLiteral.set(key, anon);
-                }
-                else {
-                    anon = this.df.literal(`${ANONL_PREFIX}${nanoid(NANOID_LEN)}`, val.datatype);
-                    this.varToAnonLiteral.set(key, anon);
-                }
+            const key = this._genKey(val);
+            const result = this.literalToAnonMap.get(key);
+            if (result != undefined) {
+                return result;
             }
+            const anonLiteral = `${ANONL_PREFIX}${nanoid(NANOID_LEN)}`;
+            const languageOrDatatype = val.language !== '' ? val.language : val.datatype;
+            const anon = this.df.literal(anonLiteral, languageOrDatatype);
+            this.literalToAnonMap.set(key, anon);
+            this.deAnonMap.set(anonLiteral, val);
             return anon;
         };
         this.getObject = (val) => {
@@ -241,12 +239,13 @@ export class Anonymizer {
                 return this.get(val);
             }
             else {
-                return this.varToAnonLiteral.get(key);
+                return this.literalToAnonMap.get(key);
             }
         };
-        this.varToAnon = new Map();
-        this.varToAnonBlank = new Map();
-        this.varToAnonLiteral = new Map();
+        this.iriToAnonMap = new Map();
+        this.bnodeToAnonMap = new Map();
+        this.literalToAnonMap = new Map();
+        this.deAnonMap = new Map();
         this.df = df;
     }
 }
