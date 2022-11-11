@@ -428,17 +428,20 @@ export const genJsonResults = (jsonVars, bindingsArray) => {
 };
 export const isWildcard = (vars) => vars.length === 1 && 'value' in vars[0] && vars[0].value === '*';
 export const addBnodePrefix = (quad) => {
-    if (quad.subject.termType === 'BlankNode'
-        && !quad.subject.value.startsWith(BNODE_PREFIX)) {
-        quad.subject.value = `${BNODE_PREFIX}${quad.subject.value}`;
-    }
-    if (quad.object.termType === 'BlankNode'
-        && !quad.object.value.startsWith(BNODE_PREFIX)) {
-        quad.object.value = `${BNODE_PREFIX}${quad.object.value}`;
-    }
-    if (quad.graph.termType === 'BlankNode'
-        && !quad.graph.value.startsWith(BNODE_PREFIX)) {
-        quad.graph.value = `${BNODE_PREFIX}${quad.graph.value}`;
-    }
-    return quad;
+    const _addBnodePrefix = (quad) => {
+        if (quad.subject.termType === 'BlankNode'
+            && !quad.subject.value.startsWith(BNODE_PREFIX)) {
+            quad.subject.value = `${BNODE_PREFIX}${quad.subject.value}`;
+        }
+        if (quad.object.termType === 'BlankNode'
+            && !quad.object.value.startsWith(BNODE_PREFIX)) {
+            quad.object.value = `${BNODE_PREFIX}${quad.object.value}`;
+        }
+        if (quad.graph.termType === 'BlankNode'
+            && !quad.graph.value.startsWith(BNODE_PREFIX)) {
+            quad.graph.value = `${BNODE_PREFIX}${quad.graph.value}`;
+        }
+        return quad;
+    };
+    return Array.isArray(quad) ? quad.map((q) => _addBnodePrefix(q)) : _addBnodePrefix(quad);
 };

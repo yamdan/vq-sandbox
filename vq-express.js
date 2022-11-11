@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, ANON_PREFIX } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -81,7 +81,7 @@ const respondToSelectQuery = async (query, parsedQuery) => {
 const respondToConstructQuery = async (parsedQuery) => {
     const quadsStream = await parsedQuery.execute();
     const quadsArray = await streamToArray(quadsStream);
-    const quadsArrayWithBnodePrefix = quadsArray.map((quad) => addBnodePrefix(quad));
+    const quadsArrayWithBnodePrefix = addBnodePrefix(quadsArray);
     const quadsJsonld = await jsonld.fromRDF(quadsArrayWithBnodePrefix);
     const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader: customDocLoader });
     return quadsJsonldCompact;
@@ -160,7 +160,7 @@ app.get('/zk-sparql/fetch', async (req, res, next) => {
             // concat document and proofs
             const anonymizedCred = anonymizedDoc.concat(proofQuads);
             // add bnode prefix `_:` to blank node ids
-            const anonymizedCredWithBnodePrefix = anonymizedCred.map((quad) => addBnodePrefix(quad));
+            const anonymizedCredWithBnodePrefix = addBnodePrefix(anonymizedCred);
             // RDF to JSON-LD
             const credJson = await jsonld.fromRDF(anonymizedCredWithBnodePrefix);
             // to compact JSON-LD
@@ -204,28 +204,21 @@ app.get('/zk-sparql/', async (req, res, next) => {
     const vps = [];
     for (const creds of revealedCredsArray) {
         const datasets = [];
-        for (const [_credGraphIri, { wholeDoc, revealedDoc, anonymizedDoc, proofs }] of creds) {
-            // generate indexed mask, e.g.,
-            // {
-            //   "1": [ undefined, undefined, "anoni:0", undefined ],
-            //   "2": [ undefined, undefined, undefined, undefined ],
-            //   "5": [ "anoni:0", undefined, "anoni:1", undefined ]
-            // }
-            const mask = anonymizedDoc.map((quad) => [
-                quad.subject.value.startsWith(ANON_PREFIX) ? quad.subject.value : undefined,
-                quad.predicate.value.startsWith(ANON_PREFIX) ? quad.predicate.value : undefined,
-                quad.object.value.startsWith(ANON_PREFIX) ? quad.object.value : undefined,
-                quad.graph.value.startsWith(ANON_PREFIX) ? quad.graph.value : undefined,
-            ]);
-            const revealIndex = revealedDoc.map((revealedQuad) => wholeDoc.findIndex((wholeQuad) => wholeQuad.equals(revealedQuad)));
-            const indexedMask = Object.fromEntries(revealIndex.map((i, j) => [i, mask[j]]));
-            const canonicalizedDoc = await canonize.canonize(wholeDoc, {
-                algorithm: 'URDNA2015+'
+        const datasetsForDebug = [];
+        for (const [_credGraphIri, { wholeDoc, anonymizedDoc, proofs }] of creds) {
+            datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, deAnonMap });
+            // debug
+            const { dataset: canonicalizedNquads, issuer: c14nMap } = await canonize.canonize(addBnodePrefix(wholeDoc), {
+                algorithm: 'URDNA2015+', format: 'application/n-quads'
             });
-            datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, deAnonMap, canonicalizedDoc, indexedMask });
+            const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(wholeDoc));
+            const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
+            const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(anonymizedDoc));
+            datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, deAnonMap, c14nMap });
         }
-        console.dir(datasets, { depth: 8 });
-        // const derivedProofs = deriveProofRdf(datasets, mask, suite, documentLoader);
+        // debug
+        console.dir(datasetsForDebug, { depth: 8 });
+        // const derivedProofs = deriveProofRdf(datasets, suite, documentLoader);
     }
     // attach derived proofs
     // send response

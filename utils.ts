@@ -580,18 +580,22 @@ export const genJsonResults = (jsonVars: string[], bindingsArray: RDF.Bindings[]
 export const isWildcard = (vars: sparqljs.Variable[] | [sparqljs.Wildcard]): vars is [sparqljs.Wildcard] =>
   vars.length === 1 && 'value' in vars[0] && vars[0].value === '*';
 
-export const addBnodePrefix = (quad: RDF.Quad) => {
-  if (quad.subject.termType === 'BlankNode'
-    && !quad.subject.value.startsWith(BNODE_PREFIX)) {
-    quad.subject.value = `${BNODE_PREFIX}${quad.subject.value}`;
+export const addBnodePrefix = (quad: RDF.Quad | RDF.Quad[]) => {
+  const _addBnodePrefix = (quad: RDF.Quad) => {
+    if (quad.subject.termType === 'BlankNode'
+      && !quad.subject.value.startsWith(BNODE_PREFIX)) {
+      quad.subject.value = `${BNODE_PREFIX}${quad.subject.value}`;
+    }
+    if (quad.object.termType === 'BlankNode'
+      && !quad.object.value.startsWith(BNODE_PREFIX)) {
+      quad.object.value = `${BNODE_PREFIX}${quad.object.value}`;
+    }
+    if (quad.graph.termType === 'BlankNode'
+      && !quad.graph.value.startsWith(BNODE_PREFIX)) {
+      quad.graph.value = `${BNODE_PREFIX}${quad.graph.value}`;
+    }
+    return quad;
   }
-  if (quad.object.termType === 'BlankNode'
-    && !quad.object.value.startsWith(BNODE_PREFIX)) {
-    quad.object.value = `${BNODE_PREFIX}${quad.object.value}`;
-  }
-  if (quad.graph.termType === 'BlankNode'
-    && !quad.graph.value.startsWith(BNODE_PREFIX)) {
-    quad.graph.value = `${BNODE_PREFIX}${quad.graph.value}`;
-  }
-  return quad;
+
+  return Array.isArray(quad) ? quad.map((q) => _addBnodePrefix(q)) : _addBnodePrefix(quad);
 }
