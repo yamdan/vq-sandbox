@@ -30,8 +30,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "exec": "node vq-express.js",
-    "start": "tsc && node vq-express.js",
+    "exec": "node main.js",
+    "start": "tsc && node main.js",
     "test": "jest"
   }
 }
