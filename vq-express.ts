@@ -6,7 +6,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, ANON_PREFIX } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, PROOF } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -261,7 +261,13 @@ app.get('/zk-sparql/', async (req, res, next) => {
     const datasets = [];
     const datasetsForDebug = [];
     for (const [_credGraphIri, { wholeDoc, anonymizedDoc, proofs }] of creds) {
-      datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, anonToTerm });
+      // remove proof from whole document and anonymized document
+      datasets.push({
+        document: wholeDoc.filter((quad) => quad.predicate.value !== PROOF),
+        proof: proofs,
+        revealDocument: anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF),
+        anonToTerm
+      });
 
       // debug
       const { dataset: canonicalizedNquads, issuer: c14nMap }
