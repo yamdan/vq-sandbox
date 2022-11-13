@@ -2,7 +2,7 @@ import sparqljs from 'sparqljs';
 import { nanoid } from 'nanoid';
 // ** constants ** //
 const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
-const PROOF = 'https://w3id.org/security#proof';
+export const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg'; // TBD
 export const ANON_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/';
 const ANONI_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/iri#';
@@ -143,7 +143,8 @@ export const getDocsAndProofs = async (revealedQuads, store, df, engine, anonymi
             graph: df.namedNode(graphIri)
         });
         // remove graph name
-        const wholeDoc = vc.items.map((quad) => df.quad(quad.subject, quad.predicate, quad.object));
+        const wholeDoc = vc.items
+            .map((quad) => df.quad(quad.subject, quad.predicate, quad.object));
         // get associated proofs
         const proofs = await Promise.all((await getProofsId(graphIri, engine)).flatMap(async (proofId) => {
             if (proofId == undefined) {

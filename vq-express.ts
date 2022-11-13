@@ -272,7 +272,7 @@ app.get('/zk-sparql/', async (req, res, next) => {
       // debug
       const { dataset: canonicalizedNquads, issuer: c14nMap }
         = await canonize.canonize(addBnodePrefix(wholeDoc), {
-          algorithm: 'URDNA2015+', format: 'application/n-quads'
+          algorithm: 'URDNA2015', format: 'application/n-quads'
         });
       const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(wholeDoc));
       const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));

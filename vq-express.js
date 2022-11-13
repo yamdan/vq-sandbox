@@ -5,7 +5,7 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray } from './utils.js';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, PROOF } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
@@ -206,19 +206,25 @@ app.get('/zk-sparql/', async (req, res, next) => {
         const datasets = [];
         const datasetsForDebug = [];
         for (const [_credGraphIri, { wholeDoc, anonymizedDoc, proofs }] of creds) {
-            datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, anonToTerm });
+            // remove proof from whole document and anonymized document
+            datasets.push({
+                document: wholeDoc.filter((quad) => quad.predicate.value !== PROOF),
+                proof: proofs,
+                revealDocument: anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF),
+                anonToTerm
+            });
             // debug
             const { dataset: canonicalizedNquads, issuer: c14nMap } = await canonize.canonize(addBnodePrefix(wholeDoc), {
-                algorithm: 'URDNA2015+', format: 'application/n-quads'
+                algorithm: 'URDNA2015', format: 'application/n-quads'
             });
             const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(wholeDoc));
             const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
             const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(anonymizedDoc));
             datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, anonToTerm, c14nMap });
-            console.log(`document =\`\n${wholeNquads}\n\``);
-            console.log(`revealedDocument =\`\n${anonymizedNquads}\``);
-            console.log(`proofs =\`\n${proofsNquads}\n\``);
-            console.log(`anonToTerm =\n`);
+            console.log(`const document = \`\n${wholeNquads}\n\`\;`);
+            console.log(`const revealedDocument = \`\n${anonymizedNquads}\`\;`);
+            console.log(`const proofs = \`\n${proofsNquads}\n\`\;`);
+            console.log(`const anonToTerm =\n`);
             console.dir(anonToTerm);
         }
         // debug
