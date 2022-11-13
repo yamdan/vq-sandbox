@@ -135,8 +135,8 @@ const fetch = async (query) => {
         .map((bindings) => identifyCreds(bindings, gVarToBgpTriple))
         .map(({ bindings, graphIriToBgpTriple }) => getRevealedQuads(graphIriToBgpTriple, bindings, vars, df, anonymizer))
         .map(async (revealedQuads) => getDocsAndProofs(await revealedQuads, store, df, engine, anonymizer)));
-    const deAnonMap = anonymizer.deAnonMap;
-    return { vars, bindingsArray, revealedCredsArray, deAnonMap };
+    const anonToTerm = anonymizer.anonToTerm;
+    return { vars, bindingsArray, revealedCredsArray, anonToTerm };
 };
 // zk-SPARQL endpoint (fetch)
 app.get('/zk-sparql/fetch', async (req, res, next) => {
@@ -199,14 +199,14 @@ app.get('/zk-sparql/', async (req, res, next) => {
     if ('error' in queryResult) {
         return next(new Error(queryResult.error));
     }
-    const { vars, bindingsArray, revealedCredsArray, deAnonMap } = queryResult;
+    const { vars, bindingsArray, revealedCredsArray, anonToTerm } = queryResult;
     // derive proofs
     const vps = [];
     for (const creds of revealedCredsArray) {
         const datasets = [];
         const datasetsForDebug = [];
         for (const [_credGraphIri, { wholeDoc, anonymizedDoc, proofs }] of creds) {
-            datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, deAnonMap });
+            datasets.push({ document: wholeDoc, proof: proofs, revealDocument: anonymizedDoc, anonToTerm });
             // debug
             const { dataset: canonicalizedNquads, issuer: c14nMap } = await canonize.canonize(addBnodePrefix(wholeDoc), {
                 algorithm: 'URDNA2015+', format: 'application/n-quads'
@@ -214,10 +214,16 @@ app.get('/zk-sparql/', async (req, res, next) => {
             const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(wholeDoc));
             const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
             const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(anonymizedDoc));
-            datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, deAnonMap, c14nMap });
+            datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, anonToTerm, c14nMap });
+            console.log(`document =\`\n${wholeNquads}\n\``);
+            console.log(`revealedDocument =\`\n${anonymizedNquads}\``);
+            console.log(`proofs =\`\n${proofsNquads}\n\``);
+            console.log(`anonToTerm =\n`);
+            console.dir(anonToTerm);
         }
         // debug
-        console.dir(datasetsForDebug, { depth: 8 });
+        //console.dir(datasetsForDebug, { depth: 8 });
+        //console.dir(datasets, { depth: 8 });    
         // const derivedProofs = deriveProofRdf(datasets, suite, documentLoader);
     }
     // attach derived proofs

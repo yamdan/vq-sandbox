@@ -194,7 +194,7 @@ export class Anonymizer {
                 const anonIri = `${ANONI_PREFIX}${nanoid(NANOID_LEN)}`;
                 anon = this.df.namedNode(anonIri);
                 this.iriToAnonMap.set(key, anon);
-                this.deAnonMap.set(anonIri, val);
+                this.anonToTerm.set(anonIri, val);
             }
             else {
                 const result = this.bnodeToAnonMap.get(key);
@@ -204,7 +204,7 @@ export class Anonymizer {
                 const anonBnid = `${ANONB_PREFIX}${nanoid(NANOID_LEN)}`;
                 anon = this.df.namedNode(anonBnid);
                 this.bnodeToAnonMap.set(key, anon);
-                this.deAnonMap.set(anonBnid, val);
+                this.anonToTerm.set(anonBnid, val);
             }
             return anon;
         };
@@ -230,7 +230,7 @@ export class Anonymizer {
             const languageOrDatatype = val.language !== '' ? val.language : val.datatype;
             const anon = this.df.literal(anonLiteral, languageOrDatatype);
             this.literalToAnonMap.set(key, anon);
-            this.deAnonMap.set(anonLiteral, val);
+            this.anonToTerm.set(anonLiteral, val);
             return anon;
         };
         this.getObject = (val) => {
@@ -245,7 +245,7 @@ export class Anonymizer {
         this.iriToAnonMap = new Map();
         this.bnodeToAnonMap = new Map();
         this.literalToAnonMap = new Map();
-        this.deAnonMap = new Map();
+        this.anonToTerm = new Map();
         this.df = df;
     }
 }

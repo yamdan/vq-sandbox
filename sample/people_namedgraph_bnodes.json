@@ -9,8 +9,8 @@
       ],
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer1",
-      "issuanceDate": "2021-06-22T00:00:00Z",
-      "expirationDate": "2022-06-22T00:00:00Z",
+      "issuanceDate": "2022-11-12T00:00:00Z",
+      "expirationDate": "2023-11-12T00:00:00Z",
       "credentialSubject": {
         "id": "did:example:John",
         "type": "Person",
@@ -24,10 +24,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-18T06:25:27Z",
+        "created": "2022-11-12T06:32:29Z",
         "verificationMethod": "did:example:issuer1#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+        "proofValue": "kjutbi/deDQvhsggZNW//PuyCpjnxAzPopqECZRnxRWbVykWbJcSPlbR9D9ib2GcObDLD+RXIoR9LciOM1vA00krkTa7Sq4ZptWvQUVO0lIEjabe/IY47vUjcc1dEaXPm1xry12rPW/iH1l7iQptHw=="
       }
     }
   },
@@ -41,8 +41,8 @@
       ],
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer2",
-      "issuanceDate": "2022-01-12T00:00:00Z",
-      "expirationDate": "2023-01-12T00:00:00Z",
+      "issuanceDate": "2022-04-01T00:00:00Z",
+      "expirationDate": "2023-04-01T00:00:00Z",
       "credentialSubject": {
         "id": "did:example:John",
         "type": "Employee",
@@ -53,10 +53,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-18T06:25:27Z",
+        "created": "2022-11-12T06:35:07Z",
         "verificationMethod": "did:example:issuer2#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+        "proofValue": "hpn+DG/Nn6fwnbPGKMEIhBV/xvpmp63csKafngfYq5/5zjxrXV88rtyyAgaTMPx6PqcD5ws2TrOcGw1+BVOdA74OF8X6TE2J1OJrWzqJrMcEZhskT/VODqHzVFbDwTmcROsaD9irswiYG8aSBlcaeA=="
       }
     }
   },
@@ -71,8 +71,8 @@
       "id": "http://example.org/credentials/3",
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer3",
-      "issuanceDate": "2021-09-01T00:00:00Z",
-      "expirationDate": "2022-09-01T00:00:00Z",
+      "issuanceDate": "2022-01-01T00:00:00Z",
+      "expirationDate": "2023-01-01T00:00:00Z",
       "credentialSubject": {
         "id": "http://example.org/cityA",
         "type": "Place",
@@ -82,10 +82,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-19T07:57:21Z",
+        "created": "2022-11-12T06:37:01Z",
         "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
+        "proofValue": "q5fZE4huC3w5CY6zkrEO9UvxIqRgFvpW00GwWw1zIDl8zKmwl2OphjabkWK4RYtIL7fhICwFsaFsgmanEPg1At0XFZsuEj79FOGL0T2+2QE+86YlrWVsR0bT/Y/bJZpXCuet6WFkrFL83p23uR5UTQ=="
       }
     }
   },
@@ -99,9 +99,9 @@
       ],
       "id": "http://example.org/credentials/4",
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer4",
-      "issuanceDate": "2021-09-01T00:00:00Z",
-      "expirationDate": "2022-09-01T00:00:00Z",
+      "issuer": "did:example:issuer3",
+      "issuanceDate": "2022-02-01T00:00:00Z",
+      "expirationDate": "2023-02-01T00:00:00Z",
       "credentialSubject": {
         "id": "http://example.org/cityB",
         "type": "Place",
@@ -111,10 +111,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-19T07:57:21Z",
-        "verificationMethod": "did:example:issuer4#bbs-bls-key1",
+        "created": "2022-11-12T06:38:21Z",
+        "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "llrhBPDt1dP3YvDWY5eflc1FosEubM1BBVgANnw0Dke3HLzjSm+mrndu+HLIFKLhELc1brZ1tyNA1tR9LcteB20qkJUmxkSQFpa4UF1CMklrBUJY+b211sY0Y9x1GuJafkC6xqrCumRBOs/9fWAVdg=="
+        "proofValue": "h2fv1gAb+BPxRMY0msHxSYZSIyV6x8Tjh++QTPQHjC+riKhSLIb/9sUC5aFsz3TJTg5P7+5vwpeGxGt0QXtHzJ0rnszoW3R8bqK1cfl96oBBWgExY1ftgyODll4TUnDiSV6ccudhP6bsg6RZERFy/Q=="
       }
     }
   },
@@ -127,9 +127,9 @@
         "https://schema.org"
       ],
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer6",
-      "issuanceDate": "2022-01-12T00:00:00Z",
-      "expirationDate": "2023-01-12T00:00:00Z",
+      "issuer": "did:example:issuer3",
+      "issuanceDate": "2022-03-01T00:00:00Z",
+      "expirationDate": "2023-03-01T00:00:00Z",
       "credentialSubject": {
         "id": "did:example:companyX",
         "type": "Organization",
@@ -142,10 +142,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-18T06:25:27Z",
-        "verificationMethod": "did:example:issuer5#bbs-bls-key1",
+        "created": "2022-11-12T06:40:08Z",
+        "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "thkeyrENxsehecjWK3dtgG02dgEjcUlQ9EU479daILnJkXvsdT7wunqh2RswCNydRP71skmp/tS/xk8RCVJznG8qGeEqx5TWvkHQMv2y484O9MJ168Xbt2PVpsZDQ40TEE/4kokIE7Ws/5swMKnIvw=="
+        "proofValue": "qDmNn7dMBTcPIZvaf7fO7OIT4x5fl0aDkMtsJIrQgaChQ1REdOV/YnjD/hjjUqCuOv/FMu8NPdRzdqltl3i098U+Gpk/e6pq4v/S3X9AmSdc+pnWBWw54YW2MjxZHIvdAXCSJ3eMfSPlroigzYNRGA=="
       }
     }
   },
@@ -158,9 +158,9 @@
         "https://schema.org"
       ],
       "type": "VerifiableCredential",
-      "issuer": "did:example:issuer7",
-      "issuanceDate": "2021-07-01T00:00:00Z",
-      "expirationDate": "2022-07-01T00:00:00Z",
+      "issuer": "did:example:issuer3",
+      "issuanceDate": "2022-05-01T00:00:00Z",
+      "expirationDate": "2023-05-01T00:00:00Z",
       "credentialSubject": {
         "type": "Person",
         "givenName": "Jane",
@@ -175,10 +175,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-10-19T07:56:57Z",
-        "verificationMethod": "did:example:issuer6#bbs-bls-key1",
+        "created": "2022-11-12T06:41:13Z",
+        "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "jgRbySOm6k6YxzqTzCcjBiaAIpJRg9wCPRp4TScEQP7G5omUf709LLCTc04CpGAOFLkzw/hivtsuTKks73zungVTRLWzJukuWBxbT7oTjIYjccPhVF9aZvuOymPSi9k7i7jH9RGh3g1FOdreQ3Ovuw=="
+        "proofValue": "sXBIXuVqYE8CYBrtsxmORxmFcMMd0gT5Y8RXTHGfSR7TA4+KC8mJFt0DLpjtm9Q8Dvviq4HsTg5pZArcHpV0K+Yz5JD7xFw9ulIlGpxy/Q8p+tXJyLtazmvEf1O/C56e/YeLTyTTTShoNnonp6NCFw=="
       }
     }
   }

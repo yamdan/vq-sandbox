@@ -295,14 +295,14 @@ export class Anonymizer {
   iriToAnonMap: Map<string, sparqljs.IriTerm>;
   bnodeToAnonMap: Map<string, sparqljs.IriTerm>;
   literalToAnonMap: Map<string, sparqljs.LiteralTerm>;
-  deAnonMap: Map<string, ZkTerm>;
+  anonToTerm: Map<string, ZkTerm>;
   df: DataFactory<RDF.Quad>;
 
   constructor(df: DataFactory<RDF.Quad>) {
     this.iriToAnonMap = new Map<string, sparqljs.IriTerm>();
     this.bnodeToAnonMap = new Map<string, sparqljs.IriTerm>();
     this.literalToAnonMap = new Map<string, sparqljs.LiteralTerm>();
-    this.deAnonMap = new Map<string, ZkTerm>();
+    this.anonToTerm = new Map<string, ZkTerm>();
     this.df = df;
   }
 
@@ -322,7 +322,7 @@ export class Anonymizer {
       const anonIri = `${ANONI_PREFIX}${nanoid(NANOID_LEN)}`;
       anon = this.df.namedNode(anonIri) as sparqljs.IriTerm;
       this.iriToAnonMap.set(key, anon);
-      this.deAnonMap.set(anonIri, val);
+      this.anonToTerm.set(anonIri, val);
     } else {
       const result = this.bnodeToAnonMap.get(key);
       if (result != undefined) {
@@ -331,7 +331,7 @@ export class Anonymizer {
       const anonBnid = `${ANONB_PREFIX}${nanoid(NANOID_LEN)}`;
       anon = this.df.namedNode(anonBnid) as sparqljs.IriTerm;
       this.bnodeToAnonMap.set(key, anon);
-      this.deAnonMap.set(anonBnid, val);
+      this.anonToTerm.set(anonBnid, val);
     }
     return anon;
   };
@@ -358,7 +358,7 @@ export class Anonymizer {
     const languageOrDatatype = val.language !== '' ? val.language : val.datatype;
     const anon = this.df.literal(anonLiteral, languageOrDatatype) as sparqljs.LiteralTerm;
     this.literalToAnonMap.set(key, anon);
-    this.deAnonMap.set(anonLiteral, val);
+    this.anonToTerm.set(anonLiteral, val);
     return anon;
   };
 
