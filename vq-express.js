@@ -9,16 +9,12 @@ import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBin
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
-import vcv1 from './context/vcv1.json' assert { type: 'json' };
-import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
-import schemaorg from './context/schemaorg.json' assert { type: 'json' };
 import { customLoader, builtinDIDDocs, builtinContexts } from "./data/index.js";
-const URL_TO_CONTEXTS = new Map([
-    ['https://www.w3.org/2018/credentials/v1', vcv1],
-    ['https://zkp-ld.org/bbs-termwise-2021.jsonld', zkpld],
-    ['https://schema.org', schemaorg],
-]);
-const CONTEXTS = [...URL_TO_CONTEXTS.keys()]; // TBD
+const CONTEXTS = [
+    'https://www.w3.org/2018/credentials/v1',
+    'https://zkp-ld.org/bbs-termwise-2021.jsonld',
+    'https://schema.org',
+];
 const documentLoader = customLoader(new Map([
     ...builtinDIDDocs,
     ...builtinContexts,
@@ -209,6 +205,7 @@ app.get('/zk-sparql/', async (req, res, next) => {
                 anonToTerm
             });
         }
+        // run BBS+
         const suite = new BbsTermwiseSignatureProof2021({
             useNativeCanonize: false,
         });
@@ -216,25 +213,6 @@ app.get('/zk-sparql/', async (req, res, next) => {
             inputDocuments,
             documentLoader,
         });
-        // debug
-        // const { dataset: canonicalizedNquads, issuer: c14nMap }
-        //   = await canonize.canonize(addBnodePrefix(wholeDoc), {
-        //     algorithm: 'URDNA2015', format: 'application/n-quads'
-        //   });
-        // const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(
-        //   wholeDoc.filter((quad) => quad.predicate.value !== PROOF)));
-        // const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
-        // const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(
-        //   anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF)));
-        // datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, anonToTerm, c14nMap });
-        // console.log(`const document = \`\n${wholeNquads}\n\`\;`);
-        // console.log(`const revealedDocument = \`\n${anonymizedNquads}\`\;`);
-        // console.log(`const proofs = \`\n${proofsNquads}\n\`\;`);
-        // console.log(`const anonToTerm =\n`);
-        // console.dir(anonToTerm);
-        console.dir(derivedProofs, { depth: 8 });
-        // // add bnode prefix `_:` to blank node ids
-        // const anonymizedCredWithBnodePrefix = addBnodePrefix(cred);
         // RDF to JSON-LD
         const vcs = [];
         for (const { document, proof: proofs } of derivedProofs) {
@@ -251,7 +229,6 @@ app.get('/zk-sparql/', async (req, res, next) => {
             // add bnode prefix `_:` to blank node ids
             const credWithBnodePrefix = addBnodePrefix(cred);
             const credJson = await jsonld.fromRDF(credWithBnodePrefix);
-            console.log(`credJson = ${JSON.stringify(credJson, null, 2)}`);
             // to compact JSON-LD
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });
             // shape it to be a VC
