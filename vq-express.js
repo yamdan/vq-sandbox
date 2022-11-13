@@ -247,14 +247,10 @@ app.get('/zk-sparql/', async (req, res, next) => {
                 proofGraphs.push(proofGraph);
                 document.push(df.quad(documentId, df.namedNode(PROOF), proofGraphId));
             }
-            // const proofGraph = proofs.map((proof: RDF.Quad[]) => {
-            //   const graphId = df.blankNode();
-            //   const quads = proof.map((quad) =>
-            //     df.quad(quad.subject, quad.predicate, quad.object, graphId));
-            //   return { graphId, quads }
-            // });
             const cred = document.concat(proofGraphs.flat());
-            const credJson = await jsonld.fromRDF(cred);
+            // add bnode prefix `_:` to blank node ids
+            const credWithBnodePrefix = addBnodePrefix(cred);
+            const credJson = await jsonld.fromRDF(credWithBnodePrefix);
             console.log(`credJson = ${JSON.stringify(credJson, null, 2)}`);
             // to compact JSON-LD
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });

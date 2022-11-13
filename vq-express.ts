@@ -311,7 +311,9 @@ app.get('/zk-sparql/', async (req, res, next) => {
         document.push(df.quad(documentId, df.namedNode(PROOF), proofGraphId));
       }
       const cred = document.concat(proofGraphs.flat());
-      const credJson = await jsonld.fromRDF(cred);
+      // add bnode prefix `_:` to blank node ids
+      const credWithBnodePrefix = addBnodePrefix(cred);
+      const credJson = await jsonld.fromRDF(credWithBnodePrefix);
       console.log(`credJson = ${JSON.stringify(credJson, null, 2)}`);
       // to compact JSON-LD
       const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });
