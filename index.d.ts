@@ -4,3 +4,4 @@ declare module '*.json' {
 }
 
 declare module 'rdf-canonize';
+declare module 'jsonld-signatures';

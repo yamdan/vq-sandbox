@@ -7,7 +7,7 @@ import { Quadstore } from 'quadstore';
 
 // ** constants ** //
 
-const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
+export const VC_TYPE = 'https://www.w3.org/2018/credentials#VerifiableCredential';
 export const PROOF = 'https://w3id.org/security#proof';
 const GRAPH_VAR_PREFIX = 'ggggg';  // TBD
 export const ANON_PREFIX = 'https://zkp-ld.org/.well-known/genid/anonymous/';

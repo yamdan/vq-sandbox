@@ -6,7 +6,8 @@ import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, PROOF } from './utils.js';
+import { BbsTermwiseSignatureProof2021 } from '@zkp-ld/rdf-signatures-bbs';
+import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, PROOF, VC_TYPE } from './utils.js';
 
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
@@ -15,6 +16,7 @@ import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json'
 import vcv1 from './context/vcv1.json' assert { type: 'json' };
 import zkpld from './context/bbs-termwise-2021.json' assert { type: 'json' };
 import schemaorg from './context/schemaorg.json' assert { type: 'json' };
+import { customLoader, builtinDIDDocs, builtinContexts } from "./data/index.js";
 
 const URL_TO_CONTEXTS = new Map([
   ['https://www.w3.org/2018/credentials/v1', vcv1],
@@ -22,19 +24,10 @@ const URL_TO_CONTEXTS = new Map([
   ['https://schema.org', schemaorg],
 ]);
 const CONTEXTS = [...URL_TO_CONTEXTS.keys()] as unknown as jsonld.ContextDefinition; // TBD
-const customDocLoader = (url: string): any => {
-  const context = URL_TO_CONTEXTS.get(url);
-  if (context) {
-    return {
-      contextUrl: null, // this is for a context via a link header
-      document: context, // this is the actual document that was loaded
-      documentUrl: url // this is the actual context URL after redirects
-    };
-  }
-  throw new Error(
-    `Error attempted to load document remotely, please cache '${url}'`
-  );
-};
+const documentLoader = customLoader(new Map([
+  ...builtinDIDDocs,
+  ...builtinContexts,
+]));
 
 const VC_FRAME =
 {
@@ -55,6 +48,7 @@ const VP_TEMPLATE: VP =
   verifiableCredential: [],
 };
 const RDF_PREFIX = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const SEC_PREFIX = 'https://w3id.org/security#';
 
 // setup quadstore
@@ -66,7 +60,7 @@ await store.open();
 
 // store initial documents
 const scope = await store.initScope();  // for preventing blank node collisions
-const quads = await jsonld.toRDF(creds, { documentLoader: customDocLoader }) as RDF.Quad[];
+const quads = await jsonld.toRDF(creds, { documentLoader }) as RDF.Quad[];
 await store.multiPut(quads, { scope });
 
 // setup express server
@@ -104,7 +98,7 @@ const respondToConstructQuery = async (parsedQuery: RDF.QueryQuads<RDF.AllMetada
   const quadsArray = await streamToArray(quadsStream);
   const quadsArrayWithBnodePrefix = addBnodePrefix(quadsArray);
   const quadsJsonld = await jsonld.fromRDF(quadsArrayWithBnodePrefix);
-  const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader: customDocLoader });
+  const quadsJsonldCompact = await jsonld.compact(quadsJsonld, CONTEXTS, { documentLoader });
   return quadsJsonldCompact;
 };
 
@@ -212,9 +206,9 @@ app.get('/zk-sparql/fetch', async (req, res, next) => {
       // RDF to JSON-LD
       const credJson = await jsonld.fromRDF(anonymizedCredWithBnodePrefix);
       // to compact JSON-LD
-      const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader: customDocLoader });
+      const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });
       // shape it to be a VC
-      const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader: customDocLoader });
+      const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader });
       vcs.push(vc);
     }
     const vp = { ...VP_TEMPLATE };
@@ -258,43 +252,86 @@ app.get('/zk-sparql/', async (req, res, next) => {
   // derive proofs
   const vps: VP[] = [];
   for (const creds of revealedCredsArray) {
-    const datasets = [];
+    const inputDocuments = [];
     const datasetsForDebug = [];
+
     for (const [_credGraphIri, { wholeDoc, anonymizedDoc, proofs }] of creds) {
       // remove proof from whole document and anonymized document
-      datasets.push({
+      inputDocuments.push({
         document: wholeDoc.filter((quad) => quad.predicate.value !== PROOF),
-        proof: proofs,
-        revealDocument: anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF),
+        proofs,
+        revealedDocument: anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF),
         anonToTerm
       });
-
-      // debug
-      const { dataset: canonicalizedNquads, issuer: c14nMap }
-        = await canonize.canonize(addBnodePrefix(wholeDoc), {
-          algorithm: 'URDNA2015', format: 'application/n-quads'
-        });
-      const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(wholeDoc));
-      const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
-      const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(anonymizedDoc));
-      datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, anonToTerm, c14nMap });
-
-      console.log(`const document = \`\n${wholeNquads}\n\`\;`);
-      console.log(`const revealedDocument = \`\n${anonymizedNquads}\`\;`);
-      console.log(`const proofs = \`\n${proofsNquads}\n\`\;`);
-      console.log(`const anonToTerm =\n`);
-      console.dir(anonToTerm);
     }
 
+    const suite = new BbsTermwiseSignatureProof2021({
+      useNativeCanonize: false,
+    });
+
+    const derivedProofs: any = await suite.deriveProofMultiRDF({
+      inputDocuments,
+      documentLoader,
+    });
+
     // debug
-    //console.dir(datasetsForDebug, { depth: 8 });
-    //console.dir(datasets, { depth: 8 });    
+    // const { dataset: canonicalizedNquads, issuer: c14nMap }
+    //   = await canonize.canonize(addBnodePrefix(wholeDoc), {
+    //     algorithm: 'URDNA2015', format: 'application/n-quads'
+    //   });
+    // const wholeNquads = canonize.NQuads.serialize(addBnodePrefix(
+    //   wholeDoc.filter((quad) => quad.predicate.value !== PROOF)));
+    // const proofsNquads = proofs.map((proof) => canonize.NQuads.serialize(addBnodePrefix(proof)));
+    // const anonymizedNquads = canonize.NQuads.serialize(addBnodePrefix(
+    //   anonymizedDoc.filter((quad) => quad.predicate.value !== PROOF)));
+    // datasetsForDebug.push({ wholeNquads, proofsNquads, anonymizedNquads, canonicalizedNquads, anonToTerm, c14nMap });
 
-    // const derivedProofs = deriveProofRdf(datasets, suite, documentLoader);
+    // console.log(`const document = \`\n${wholeNquads}\n\`\;`);
+    // console.log(`const revealedDocument = \`\n${anonymizedNquads}\`\;`);
+    // console.log(`const proofs = \`\n${proofsNquads}\n\`\;`);
+    // console.log(`const anonToTerm =\n`);
+    // console.dir(anonToTerm);
+    console.dir(derivedProofs, { depth: 8 });
 
+    // // add bnode prefix `_:` to blank node ids
+    // const anonymizedCredWithBnodePrefix = addBnodePrefix(cred);
+
+    // RDF to JSON-LD
+    const vcs: jsonld.NodeObject[] = [];
+    for (const { document, proof: proofs } of derivedProofs) {
+      const documentId = document.find(
+        (quad: RDF.Quad) => quad.predicate.value === RDF_TYPE && quad.object.value === VC_TYPE)
+        .subject;
+      const proofGraphs = [];
+      for (const proof of proofs) {
+        const proofGraphId = df.blankNode();
+        const proofGraph = proof.map((quad: RDF.Quad) =>
+          df.quad(quad.subject, quad.predicate, quad.object, proofGraphId));
+        proofGraphs.push(proofGraph);
+        document.push(df.quad(documentId, df.namedNode(PROOF), proofGraphId));
+      }
+      const cred = document.concat(proofGraphs.flat());
+      const credJson = await jsonld.fromRDF(cred);
+      console.log(`credJson = ${JSON.stringify(credJson, null, 2)}`);
+      // to compact JSON-LD
+      const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });
+      // shape it to be a VC
+      const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader });
+      vcs.push(vc);
+    }
+
+    // serialize credentials
+    const vp = { ...VP_TEMPLATE };
+    vp['verifiableCredential'] = vcs;
+    vps.push(vp);
   }
 
-  // attach derived proofs
+  // add VP (or VCs) to bindings
+  const bindingsWithVPArray = bindingsArray.map(
+    (bindings, i) =>
+      bindings.set('vp', df.literal(
+        `${JSON.stringify(vps[i], null, 2)}`,
+        df.namedNode(`${RDF_PREFIX}JSON`))));
 
   // send response
   let jsonVars: string[];
@@ -305,6 +342,6 @@ app.get('/zk-sparql/', async (req, res, next) => {
     // SELECT ?s ?p ?o WHERE {...}
     jsonVars = vars.map((v) => v.value);
   }
-  //jsonVars.push('vp');
-  res.send(genJsonResults(jsonVars, bindingsArray));
+  jsonVars.push('vp');
+  res.send(genJsonResults(jsonVars, bindingsWithVPArray));
 })
