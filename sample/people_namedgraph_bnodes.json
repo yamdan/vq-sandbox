@@ -7,6 +7,7 @@
         "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "https://schema.org"
       ],
+      "id": "http://example.org/credentials/1",
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer1",
       "issuanceDate": "2022-11-12T00:00:00Z",
@@ -24,10 +25,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:32:29Z",
+        "created": "2022-11-15T05:23:52Z",
         "verificationMethod": "did:example:issuer1#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "kjutbi/deDQvhsggZNW//PuyCpjnxAzPopqECZRnxRWbVykWbJcSPlbR9D9ib2GcObDLD+RXIoR9LciOM1vA00krkTa7Sq4ZptWvQUVO0lIEjabe/IY47vUjcc1dEaXPm1xry12rPW/iH1l7iQptHw=="
+        "proofValue": "uN2W3TUheNpv3LHwXJzP8kufE4WLl+iRxrWhq1NeJXlByV3Inxa8+73GiJhO1ShNQGavOrxPvpX/f565KBwFJJLPW8qwiv6xMrkjEyMweOotfTD8Jh5IO7jGTHLQBt0NVpWr6LY/dzkHNvZaQEBPVw=="
       }
     }
   },
@@ -39,6 +40,7 @@
         "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "https://schema.org"
       ],
+      "id": "http://example.org/credentials/2",
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer2",
       "issuanceDate": "2022-04-01T00:00:00Z",
@@ -53,10 +55,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:35:07Z",
+        "created": "2022-11-15T05:29:29Z",
         "verificationMethod": "did:example:issuer2#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "hpn+DG/Nn6fwnbPGKMEIhBV/xvpmp63csKafngfYq5/5zjxrXV88rtyyAgaTMPx6PqcD5ws2TrOcGw1+BVOdA74OF8X6TE2J1OJrWzqJrMcEZhskT/VODqHzVFbDwTmcROsaD9irswiYG8aSBlcaeA=="
+        "proofValue": "uTnZthgUBzb1KtBEdSyVcFVuBeexghtxjQn1F2i1TKHys/Ybb+MW1xcz3SqLw1ABJAm3jY+mnRsf8akEVvpwN4gocn26wszOlwBBtanH8QcvB0+fVKF/1kOYCxS3R+xz1Nj7vmynzkFSgGSfghU99g=="
       }
     }
   },
@@ -82,10 +84,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:37:01Z",
+        "created": "2022-11-15T05:28:43Z",
         "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "q5fZE4huC3w5CY6zkrEO9UvxIqRgFvpW00GwWw1zIDl8zKmwl2OphjabkWK4RYtIL7fhICwFsaFsgmanEPg1At0XFZsuEj79FOGL0T2+2QE+86YlrWVsR0bT/Y/bJZpXCuet6WFkrFL83p23uR5UTQ=="
+        "proofValue": "pDGKHhj+2/ElxIaf5SCeb2aws46zmWonx4Lww+zXtSfkLMmrYrDAHtJMSXUxCGpxIdvJMLT5Rip3XfBixN5AqrJylrLDy3Ik54sWfvJQi7YbvTSxwveMqvtC09cJV5J48jARUj56S1DZ1pfr02PfgA=="
       }
     }
   },
@@ -111,10 +113,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:38:21Z",
+        "created": "2022-11-15T05:28:02Z",
         "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "h2fv1gAb+BPxRMY0msHxSYZSIyV6x8Tjh++QTPQHjC+riKhSLIb/9sUC5aFsz3TJTg5P7+5vwpeGxGt0QXtHzJ0rnszoW3R8bqK1cfl96oBBWgExY1ftgyODll4TUnDiSV6ccudhP6bsg6RZERFy/Q=="
+        "proofValue": "syFC2v9Is6rdJjUS3nyZiET9JXc7UJOTgrmiX5Qxig9rguWUtIebfOQduc7uOjnvcyPmgIofB/7AHsfQb1efp+wNnccb8Ws5aBQU2rE8vo1GECmW1adruDlQKzZDLn+PfyspBsu6dIVvi5pwikCFKQ=="
       }
     }
   },
@@ -126,6 +128,7 @@
         "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "https://schema.org"
       ],
+      "id": "http://example.org/credentials/5",
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer3",
       "issuanceDate": "2022-03-01T00:00:00Z",
@@ -142,10 +145,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:40:08Z",
+        "created": "2022-11-15T05:27:41Z",
         "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "qDmNn7dMBTcPIZvaf7fO7OIT4x5fl0aDkMtsJIrQgaChQ1REdOV/YnjD/hjjUqCuOv/FMu8NPdRzdqltl3i098U+Gpk/e6pq4v/S3X9AmSdc+pnWBWw54YW2MjxZHIvdAXCSJ3eMfSPlroigzYNRGA=="
+        "proofValue": "qYhi5xdufH6dqWmTbh5W1LDfMwBDCHamjozoG61vOV3P1ovykoS5gMVcSlgsrlv6PMGcHeCZ4IBa0yvojtwiOAkZyyW269KTdaAqnC8nHr1QvW07mR9GMCFO7k0HNwB7q/OM+lPlTGwhnQwp2ACupg=="
       }
     }
   },
@@ -157,11 +160,13 @@
         "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "https://schema.org"
       ],
+      "id": "http://example.org/credentials/6",
       "type": "VerifiableCredential",
       "issuer": "did:example:issuer3",
       "issuanceDate": "2022-05-01T00:00:00Z",
       "expirationDate": "2023-05-01T00:00:00Z",
       "credentialSubject": {
+        "id": "did:example:Jane",
         "type": "Person",
         "givenName": "Jane",
         "familyName": "Doe",
@@ -175,10 +180,10 @@
       "proof": {
         "@context": "https://zkp-ld.org/bbs-termwise-2021.jsonld",
         "type": "BbsTermwiseSignature2021",
-        "created": "2022-11-12T06:41:13Z",
+        "created": "2022-11-15T05:27:06Z",
         "verificationMethod": "did:example:issuer3#bbs-bls-key1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "sXBIXuVqYE8CYBrtsxmORxmFcMMd0gT5Y8RXTHGfSR7TA4+KC8mJFt0DLpjtm9Q8Dvviq4HsTg5pZArcHpV0K+Yz5JD7xFw9ulIlGpxy/Q8p+tXJyLtazmvEf1O/C56e/YeLTyTTTShoNnonp6NCFw=="
+        "proofValue": "hja82F9rKHDTxDnkyTdBoab0EFinHwyhii62Sp+9uAkXFGB/dVTRhRbYT6GEeL4VFinB5JHJ+2HhadD8qy/q1+SLHRUq/rx1JDKBehwyK99FtqQg9s7MkZA9YjMoNWAY09zqdSAtkq5btcTBKnRqLw=="
       }
     }
   }
