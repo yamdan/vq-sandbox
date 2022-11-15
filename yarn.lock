@@ -842,22 +842,9 @@
     bs58 "4.0.1"
     rfc4648 "1.5.0"
 
-"@zkp-ld/jsonld-signatures-bbs@github:zkp-ld/rdf-signatures-bbs":
-  version "0.11.15"
-  resolved "https://codeload.github.com/zkp-ld/rdf-signatures-bbs/tar.gz/42011c2cc019ba067d5de19acef3e1ad35b85f9a"
-  dependencies:
-    "@stablelib/random" "1.0.1"
-    "@zkp-ld/bbs-signatures" "0.6.14"
-    "@zkp-ld/bls12381-key-pair" "0.7.14"
-    bs58 "4.0.1"
-    jsonld "5.2.0"
-    jsonld-signatures "9.3.0"
-    rdf-canonize "^3.0.0"
-    uuid "8.3.2"
-
-"@zkp-ld/rdf-signatures-bbs@https://github.com/zkp-ld/rdf-signatures-bbs.git#deriveProofRDF":
-  version "0.11.15"
-  resolved "https://github.com/zkp-ld/rdf-signatures-bbs.git#9e98494199061fd40e6d1b827c0ebe4e58295968"
+"@zkp-ld/rdf-signatures-bbs@https://github.com/zkp-ld/rdf-signatures-bbs#deriveProofRDF":
+  version "0.0.3"
+  resolved "https://github.com/zkp-ld/rdf-signatures-bbs#34cd40e9a9a344d81e25f1b0023a237c0bd21d15"
   dependencies:
     "@rdfjs/types" "^1.1.0"
     "@stablelib/random" "1.0.1"
@@ -866,7 +853,7 @@
     bs58 "4.0.1"
     jsonld "5.2.0"
     jsonld-signatures "9.3.0"
-    rdf-canonize zkp-ld/rdf-canonize
+    rdf-canonize "https://github.com/zkp-ld/rdf-canonize.git#add-options"
     rdf-data-factory "^1.1.1"
     uuid "8.3.2"
 
@@ -2701,9 +2688,9 @@ rdf-canonize@^3.0.0:
   dependencies:
     setimmediate "^1.0.5"
 
-"rdf-canonize@github:zkp-ld/rdf-canonize", rdf-canonize@zkp-ld/rdf-canonize:
+"rdf-canonize@https://github.com/zkp-ld/rdf-canonize.git#add-options":
   version "3.3.1-0"
-  resolved "https://codeload.github.com/zkp-ld/rdf-canonize/tar.gz/c8382560c05dfd11f675c1e301666b08788459e7"
+  resolved "https://github.com/zkp-ld/rdf-canonize.git#236d902b1fdea7c709e83271891bbb5fa1f06363"
   dependencies:
     setimmediate "^1.0.5"
 
