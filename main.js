@@ -16,10 +16,6 @@ const CONTEXTS = [
     'https://zkp-ld.org/bbs-termwise-2021.jsonld',
     'https://schema.org',
 ];
-// const documentLoader = customLoader(new Map([
-//   ...builtinDIDDocs,
-//   ...builtinContexts,
-// ]));
 const documentLoader = customLoader;
 const VC_FRAME = {
     '@context': CONTEXTS,
