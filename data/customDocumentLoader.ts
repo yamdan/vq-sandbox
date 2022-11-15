@@ -31,7 +31,7 @@ const _prepareDocs = (obj: any): [string, string][] =>
     JSON.stringify(e[1], null, 2),
   ]);
 
-const _builtinDIDDocs = {
+const _builtinDIDDocs: Record<string, any> = {
   "did:example:issuer1": expExampleDidDoc,
   "did:example:issuer1#bbs-bls-key1": expExampleDidKey,
   "did:example:issuer2": expExampleDidDoc2,
@@ -47,7 +47,7 @@ const _builtinDIDDocs = {
 };
 export const builtinDIDDocs = new Map(_prepareDocs(_builtinDIDDocs));
 
-export const _builtinContexts = {
+export const _builtinContexts: Record<string, any> = {
   "https://www.w3.org/2018/credentials/v1": credentialContext,
   "https://www.w3.org/2018/credentials/examples/v1": vcExampleContext,
   "https://www.w3.org/ns/odrl.jsonld": odrlContext,
@@ -65,10 +65,30 @@ export const _builtinContexts = {
 };
 export const builtinContexts = new Map(_prepareDocs(_builtinContexts));
 
+// const customDocLoader =
+//   (documents: Map<string, any>) =>
+//   (url: string): any => {
+//     const context = documents.get(url);
+//     if (context) {
+//       return {
+//         contextUrl: null, // this is for a context via a link header
+//         document: context, // this is the actual document that was loaded
+//         documentUrl: url, // this is the actual context URL after redirects
+//       };
+//     }
+
+//     throw new Error(
+//       `Error attempted to load document remotely, please cache '${url}'`
+//     );
+//   };
+
+// export const customLoader = (documents: Map<string, any>) =>
+//   customDocLoader(documents);
+
+const documents = Object.assign(_builtinContexts, _builtinDIDDocs);
 const customDocLoader =
-  (documents: Map<string, any>) =>
   (url: string): any => {
-    const context = documents.get(url);
+    const context = documents[url];
     if (context) {
       return {
         contextUrl: null, // this is for a context via a link header
@@ -82,8 +102,4 @@ const customDocLoader =
     );
   };
 
-// export const customLoader = (documents: Map<string, any>) =>
-//   jsonldSignatures.extendContextLoader(customDocLoader(documents));
-
-export const customLoader = (documents: Map<string, any>) =>
-  customDocLoader(documents);
+export const customLoader = jsonldSignatures.extendContextLoader(customDocLoader);

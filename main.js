@@ -1,24 +1,26 @@
 import express from 'express';
 import jsonld from 'jsonld';
+import jsigs from 'jsonld-signatures';
 import { MemoryLevel } from 'memory-level';
 import { DataFactory } from 'rdf-data-factory';
 import { Quadstore } from 'quadstore';
 import { Engine } from 'quadstore-comunica';
-import { BbsTermwiseSignatureProof2021 } from '@zkp-ld/rdf-signatures-bbs';
+import { BbsTermwiseSignatureProof2021, verifyProofMulti } from '@zkp-ld/rdf-signatures-bbs';
 import { addBnodePrefix, Anonymizer, extractVars, genJsonResults, getExtendedBindings, getRevealedQuads, getDocsAndProofs, identifyCreds, isWildcard, parseQuery, streamToArray, PROOF, VC_TYPE } from './utils.js';
 // source documents
 import creds from './sample/people_namedgraph_bnodes.json' assert { type: 'json' };
 // built-in JSON-LD contexts
-import { customLoader, builtinDIDDocs, builtinContexts } from "./data/index.js";
+import { customLoader } from "./data/index.js";
 const CONTEXTS = [
     'https://www.w3.org/2018/credentials/v1',
     'https://zkp-ld.org/bbs-termwise-2021.jsonld',
     'https://schema.org',
 ];
-const documentLoader = customLoader(new Map([
-    ...builtinDIDDocs,
-    ...builtinContexts,
-]));
+// const documentLoader = customLoader(new Map([
+//   ...builtinDIDDocs,
+//   ...builtinContexts,
+// ]));
+const documentLoader = customLoader;
 const VC_FRAME = {
     '@context': CONTEXTS,
     type: 'VerifiableCredential',
@@ -214,8 +216,9 @@ app.get('/zk-sparql/', async (req, res, next) => {
             documentLoader,
         });
         // RDF to JSON-LD
-        const vcs = [];
+        const derivedVcs = [];
         for (const { document, proof: proofs } of derivedProofs) {
+            // connect document and proofs
             const documentId = document.find((quad) => quad.predicate.value === RDF_TYPE && quad.object.value === VC_TYPE)
                 .subject;
             const proofGraphs = [];
@@ -232,13 +235,21 @@ app.get('/zk-sparql/', async (req, res, next) => {
             // to compact JSON-LD
             const credJsonCompact = await jsonld.compact(credJson, CONTEXTS, { documentLoader });
             // shape it to be a VC
-            const vc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader });
-            vcs.push(vc);
+            const derivedVc = await jsonld.frame(credJsonCompact, VC_FRAME, { documentLoader });
+            derivedVcs.push(derivedVc);
         }
         // serialize credentials
         const vp = Object.assign({}, VP_TEMPLATE);
-        vp['verifiableCredential'] = vcs;
+        vp['verifiableCredential'] = derivedVcs;
         vps.push(vp);
+        // debug: verify derived VC
+        // separate document and proofs
+        const verified = await verifyProofMulti(derivedVcs, {
+            suite,
+            documentLoader,
+            purpose: new jsigs.purposes.AssertionProofPurpose()
+        });
+        console.log(`verified: ${JSON.stringify(verified, null, 2)}`);
     }
     // add VP (or VCs) to bindings
     const bindingsWithVPArray = bindingsArray.map((bindings, i) => bindings.set('vp', df.literal(`${JSON.stringify(vps[i], null, 2)}`, df.namedNode(`${RDF_PREFIX}JSON`))));

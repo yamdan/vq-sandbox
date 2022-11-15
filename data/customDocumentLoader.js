@@ -1,3 +1,4 @@
+import jsonldSignatures from "jsonld-signatures";
 import citizenVocab from "./context/citizen_vocab.json" assert { type: 'json' };
 import credentialContext from "./context/credential_vocab.json" assert { type: 'json' };
 import odrlContext from "./context/odrl.json" assert { type: 'json' };
@@ -57,8 +58,26 @@ export const _builtinContexts = {
     "http://schema.org/": schemaOrg,
 };
 export const builtinContexts = new Map(_prepareDocs(_builtinContexts));
-const customDocLoader = (documents) => (url) => {
-    const context = documents.get(url);
+// const customDocLoader =
+//   (documents: Map<string, any>) =>
+//   (url: string): any => {
+//     const context = documents.get(url);
+//     if (context) {
+//       return {
+//         contextUrl: null, // this is for a context via a link header
+//         document: context, // this is the actual document that was loaded
+//         documentUrl: url, // this is the actual context URL after redirects
+//       };
+//     }
+//     throw new Error(
+//       `Error attempted to load document remotely, please cache '${url}'`
+//     );
+//   };
+// export const customLoader = (documents: Map<string, any>) =>
+//   customDocLoader(documents);
+const documents = Object.assign(_builtinContexts, _builtinDIDDocs);
+const customDocLoader = (url) => {
+    const context = documents[url];
     if (context) {
         return {
             contextUrl: null,
@@ -68,6 +87,4 @@ const customDocLoader = (documents) => (url) => {
     }
     throw new Error(`Error attempted to load document remotely, please cache '${url}'`);
 };
-// export const customLoader = (documents: Map<string, any>) =>
-//   jsonldSignatures.extendContextLoader(customDocLoader(documents));
-export const customLoader = (documents) => customDocLoader(documents);
+export const customLoader = jsonldSignatures.extendContextLoader(customDocLoader);
