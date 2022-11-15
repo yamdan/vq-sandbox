@@ -21,10 +21,6 @@ const CONTEXTS = [
   'https://schema.org',
 ] as unknown as jsonld.ContextDefinition;
 
-// const documentLoader = customLoader(new Map([
-//   ...builtinDIDDocs,
-//   ...builtinContexts,
-// ]));
 const documentLoader = customLoader;
 
 const VC_FRAME =

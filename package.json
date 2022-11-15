@@ -1,6 +1,7 @@
 {
   "name": "@zkp-ld/veanpods",
   "version": "0.0.1",
+  "author": "yamdan",
   "type": "module",
   "dependencies": {
     "@rdfjs/serializer-ntriples": "^2.0.0",
